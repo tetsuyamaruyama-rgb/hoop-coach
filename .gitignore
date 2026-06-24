@@ -1,0 +1,3 @@
+# local helper, not needed for the site
+__pycache__/
+*.pyc

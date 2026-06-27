@@ -154,7 +154,17 @@ header h1 span{color:var(--orange)}
 .pos{font-size:13px;color:var(--muted);margin-top:8px;padding-top:8px;border-top:1px dashed var(--line)}
 
 /* in-app recorder */
-.rec-prev{width:100%;border-radius:12px;background:#000;display:block;margin-bottom:10px}
+.rec-stage{position:relative;line-height:0;margin-bottom:10px}
+.rec-prev{width:100%;border-radius:12px;background:#000;display:block}
+.rec-badge{position:absolute;top:10px;left:10px;background:rgba(0,0,0,.55);color:#fff;font-weight:800;
+  font-size:13px;padding:5px 10px;border-radius:999px;display:flex;align-items:center;gap:6px;line-height:1}
+.rec-dot{width:9px;height:9px;border-radius:50%;background:#ff3b3b;animation:blink 1s steps(2,start) infinite}
+@keyframes blink{to{opacity:0}}
+.rec-poss{position:absolute;top:10px;right:10px;background:rgba(0,0,0,.55);color:#fff;font-size:12px;
+  padding:5px 10px;border-radius:999px;line-height:1}
+.rec-poss b{color:var(--orange-l);font-size:14px}
+.rec-hint{font-size:12px;color:var(--muted);text-align:center;margin:0 0 12px}
+.rec-badge[hidden],.rec-poss[hidden],.rec-hint[hidden]{display:none}
 .roles{display:flex;gap:10px;margin:0 0 12px}
 .role{flex:1;text-align:center;border-radius:10px;padding:8px;border:1px solid var(--line);background:var(--card)}
 .role .l{font-size:11px;color:var(--muted)}

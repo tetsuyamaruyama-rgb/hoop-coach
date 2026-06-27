@@ -581,9 +581,14 @@ $('oneonAgain').addEventListener('click', () => showScreen('home'));
 
 // ---- in-app recorder: continuous record + one-tap offense/defense swap ----
 let recStream = null, recRecorder = null, recChunks = [], recMime = '', recSegRoles = null,
-  recSegStart = 0, recEnding = false, recClips = [], recOff = 'a', recDef = 'b', recN = 0;
+  recSegStart = 0, recEnding = false, recClips = [], recOff = 'a', recDef = 'b', recN = 0,
+  recTimerIv = null, recSessionStart = 0;
 const nameOf = (id) => { const p = loadRoster().find((x) => x.id === id); return p ? `${p.name}（#${p.num}）` : id; };
 function recUpdateRoles() { $('recOffV').textContent = nameOf(recOff); $('recDefV').textContent = nameOf(recDef); }
+function recTick() { const s = Math.floor((Date.now() - recSessionStart) / 1000); $('recTimer').textContent = Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); }
+function recStartTimer() { recSessionStart = Date.now(); recTick(); recTimerIv = setInterval(recTick, 500); }
+function recStopTimer() { if (recTimerIv) { clearInterval(recTimerIv); recTimerIv = null; } }
+function recShowOverlays(on) { $('recBadge').hidden = !on; $('recPoss').hidden = !on; $('recHint').hidden = on; }
 function recPickMime() {
   const c = ['video/mp4', 'video/mp4;codecs=h264', 'video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm'];
   for (const m of c) { try { if (window.MediaRecorder && MediaRecorder.isTypeSupported(m)) return m; } catch (e) {} } return '';
@@ -591,6 +596,7 @@ function recPickMime() {
 async function recOpenCamera() {
   $('recStatus').textContent = 'カメラを ひらいています…';
   $('recStart').disabled = true; $('recSwitch').disabled = true; $('recStop').disabled = true;
+  recShowOverlays(false); recStopTimer(); $('recTimer').textContent = '0:00';
   try {
     try { recStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false }); }
     catch (e) { recStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false }); }
@@ -608,6 +614,7 @@ function recStartSeg() {
   recRecorder.ondataavailable = (e) => { if (e.data && e.data.size) recChunks.push(e.data); };
   recRecorder.onstop = recOnSegStop;
   recRecorder.start();
+  $('recPossN').textContent = recClips.length + 1; // possession currently being recorded
 }
 function recOnSegStop() {
   const blob = new Blob(recChunks, { type: (recChunks[0] && recChunks[0].type) || recMime || 'video/mp4' });
@@ -635,6 +642,7 @@ $('oneonRec').addEventListener('click', () => {
 $('recStart').addEventListener('click', () => {
   if (!recStream) return; recEnding = false; recStartSeg();
   $('recStart').disabled = true; $('recSwitch').disabled = false; $('recStop').disabled = false;
+  recShowOverlays(true); recStartTimer();
   $('recStatus').textContent = '● 録画中… 攻撃が終わったら「攻守交替」。';
 });
 $('recSwitch').addEventListener('click', () => {
@@ -647,10 +655,11 @@ $('recStop').addEventListener('click', () => {
   if (!recRecorder || recRecorder.state === 'inactive') { recStopCamera(); showScreen('1on1'); return; }
   recEnding = true; recRecorder.stop();
   $('recSwitch').disabled = true; $('recStop').disabled = true;
+  recShowOverlays(false); recStopTimer();
 });
 $('recBack').addEventListener('click', () => {
   recEnding = true; try { if (recRecorder && recRecorder.state !== 'inactive') recRecorder.stop(); } catch (e) {}
-  recStopCamera(); showScreen('1on1');
+  recStopCamera(); recShowOverlays(false); recStopTimer(); showScreen('1on1');
 });
 $('clipsBack').addEventListener('click', () => showScreen('1on1'));
 

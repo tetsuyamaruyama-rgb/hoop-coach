@@ -10,7 +10,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="バスケコーチ" />
   <link rel="apple-touch-icon" href="icons/icon-180.png" />
-  <link rel="stylesheet" href="styles.css?v=10" />
+  <link rel="stylesheet" href="styles.css?v=11" />
 </head>
 <body>
   <div id="app">
@@ -101,7 +101,12 @@
     <!-- 1on1 in-app recorder -->
     <section id="screen-1on1-rec" class="screen">
       <h2 class="h2">🎥 録画</h2>
-      <video id="recPrev" class="rec-prev" playsinline webkit-playsinline muted autoplay></video>
+      <div class="rec-stage">
+        <video id="recPrev" class="rec-prev" playsinline webkit-playsinline muted autoplay></video>
+        <div class="rec-badge" id="recBadge" hidden><span class="rec-dot"></span>REC <span id="recTimer">0:00</span></div>
+        <div class="rec-poss" id="recPoss" hidden>ポゼッション <b id="recPossN">1</b></div>
+      </div>
+      <p class="rec-hint" id="recHint">📱 横向きが おすすめ（2人が フレームに 入ります）</p>
       <div class="roles">
         <div class="role off"><div class="l">オフェンス（攻め）</div><div class="v" id="recOffV">-</div></div>
         <div class="role def"><div class="l">ディフェンス（守り）</div><div class="v" id="recDefV">-</div></div>
@@ -153,6 +158,6 @@
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-converter@4.20.0/dist/tf-converter.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-webgl@4.20.0/dist/tf-backend-webgl.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection@2.1.3/dist/pose-detection.min.js"></script>
-  <script src="app.js?v=10"></script>
+  <script src="app.js?v=11"></script>
 </body>
 </html>

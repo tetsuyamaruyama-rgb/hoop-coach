@@ -86,6 +86,10 @@ header h1 span{color:var(--orange)}
 .metric.ok .v{color:var(--good)}
 .metric.mid .v{color:var(--blue)}
 .metric.no .v{color:var(--warn)}
+.metric.skip{opacity:.55}
+.metric.skip .v{color:var(--dim)}
+.mode-btn.ang::before{background:#9fb2cc}
+.mode-btn.ang .t{color:var(--ink)}
 .saved-note{text-align:center;color:var(--good);font-weight:700;font-size:14px;margin:14px 0 0}
 
 .h2{font-size:20px;margin:4px 0 14px;font-weight:800}

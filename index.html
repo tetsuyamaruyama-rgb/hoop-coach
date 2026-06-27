@@ -10,7 +10,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="バスケコーチ" />
   <link rel="apple-touch-icon" href="icons/icon-180.png" />
-  <link rel="stylesheet" href="styles.css?v=15" />
+  <link rel="stylesheet" href="styles.css?v=16" />
 </head>
 <body>
   <div id="app">
@@ -81,6 +81,15 @@
       <div id="histList"></div>
       <button class="big-btn secondary" id="histBackBtn">⬅️ もどる</button>
       <button class="link-btn danger" id="clearBtn">🗑️ きろくを ぜんぶ けす</button>
+    </section>
+
+    <!-- camera angle selection -->
+    <section id="screen-angle" class="screen">
+      <h2 class="h2">📐 どの 角度から？</h2>
+      <p class="note" id="angleReco" style="margin:0 0 12px"></p>
+      <button class="mode-btn ang" data-angle="front"><span class="emoji">🧍</span><span class="t">正面から</span><small>足の開き・スタンス幅・左右の動き</small></button>
+      <button class="mode-btn ang" data-angle="side"><span class="emoji">🏃</span><span class="t">横（側面）から</span><small>ひざ・ひじの伸び・フォロースルー・ボールの弧</small></button>
+      <button class="big-btn secondary" id="angleBack">⬅️ もどる</button>
     </section>
 
     <!-- dribble move-type sub-menu -->
@@ -179,6 +188,6 @@
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-converter@4.20.0/dist/tf-converter.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-webgl@4.20.0/dist/tf-backend-webgl.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection@2.1.3/dist/pose-detection.min.js"></script>
-  <script src="app.js?v=15"></script>
+  <script src="app.js?v=16"></script>
 </body>
 </html>

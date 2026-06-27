@@ -169,10 +169,13 @@ function loadModel() { try { return JSON.parse(localStorage.getItem(MODEL_KEY)) 
 function saveModel(mode, vals) { const m = loadModel(); m[mode] = vals; try { localStorage.setItem(MODEL_KEY, JSON.stringify(m)); } catch (e) {} }
 function clearModel(mode) { const m = loadModel(); delete m[mode]; try { localStorage.setItem(MODEL_KEY, JSON.stringify(m)); } catch (e) {} }
 function modelVals(metrics) { const o = {}; metrics.forEach((x) => { if (x.raw != null) o[x.key] = x.raw; }); return o; }
-function gradeAll(mode, metrics) {
+function gradeAll(mode, metrics, angle) {
   const ref = loadModel()[mode];
   metrics.forEach((m) => {
-    if (m.level != null) return; // already a fixed-level metric (legacy)
+    if (m.level != null || m.skip) return; // already graded / skipped
+    if (angle && ANGLE_OK[m.key] && ANGLE_OK[m.key] !== 'both' && ANGLE_OK[m.key] !== angle) {
+      m.skip = true; m.value = '—'; return; // this angle can't measure it
+    }
     const L = (ref && ref[m.key] != null) ? gradeVsModel(m, ref[m.key]) : gradeDefault(m);
     m.level = L; m.good = L === 2;
     m.value = (m.valNum != null) ? m.valNum : (m.valWords ? m.valWords[L] : '');
@@ -291,6 +294,16 @@ const MODE_LABEL = {
   dribble_normal: '⛹️ ドリブル：ノーマル', dribble_front: '⛹️ ドリブル：フロントチェンジ',
   dribble_back: '⛹️ ドリブル：バックチェンジ', dribble_legthru: '⛹️ ドリブル：レッグスルー',
 };
+// which camera angle each measurement is reliable from ('side' | 'front' | 'both')
+const ANGLE_OK = {
+  knee: 'side', elbow: 'side', follow: 'both', foot: 'front',
+  stance: 'side', headup: 'side', rhythm: 'both', base: 'front', hands: 'both',
+};
+// recommended angle per (sub)mode
+const ANGLE_RECO = {
+  shoot: 'side', defense: 'front',
+  dribble_normal: 'side', dribble_front: 'front', dribble_back: 'front', dribble_legthru: 'front',
+};
 const MODE_ERR = {
   shoot: 'からだが よく うつってなかったみたい。よこ から、ぜんしんが うつるように とってね。',
   dribble: 'からだが よく うつってなかったみたい。ぜんしんが うつるように とってね。',
@@ -354,16 +367,17 @@ function fbCard(kind, [ico, title, sub]) {
   return d;
 }
 function showResult(mode, res, data) {
-  gradeAll(mode, res.metrics); // ensure levels set (idempotent)
-  const lvl = (m) => (m.level == null ? (m.good ? 2 : 0) : m.level); // tolerate old shape
-  const sorted = res.metrics.slice().sort((a, b) => lvl(a) - lvl(b)); // worst first
-  const good = res.metrics.filter((m) => lvl(m) === 2).length; // only ◎ counts
-  // demanding scoring: need ALL ◎ for 3 stars
-  const total = res.metrics.length;
-  const stars = good >= total ? 3 : good >= Math.ceil(total / 2) ? 2 : 1;
-  $('modeTag').textContent = MODE_LABEL[mode] + (loadModel()[mode] ? ' ・ お手本基準' : ' ・ 標準基準');
+  gradeAll(mode, res.metrics, currentAngle); // ensure levels/skip set (idempotent)
+  const lvl = (m) => (m.level == null ? (m.good ? 2 : 0) : m.level);
+  const graded = res.metrics.filter((m) => !m.skip); // only angle-measurable metrics count
+  const sorted = graded.slice().sort((a, b) => lvl(a) - lvl(b)); // worst first
+  const good = graded.filter((m) => lvl(m) === 2).length;
+  const total = graded.length;
+  const stars = total === 0 ? 1 : good >= total ? 3 : good >= Math.ceil(total / 2) ? 2 : 1;
+  const angleTxt = currentAngle === 'front' ? '正面' : '横';
+  $('modeTag').textContent = MODE_LABEL[mode] + ' ・ ' + angleTxt + (loadModel()[mode] ? ' ・ お手本基準' : '');
   $('scoreStars').textContent = '⭐'.repeat(stars);
-  const best = res.metrics.filter((m) => lvl(m) === 2)[0];
+  const best = graded.filter((m) => lvl(m) === 2)[0];
   const worst = sorted[0];
   const fb = $('feedback'); fb.innerHTML = '';
   if (best) fb.appendChild(fbCard('good', best.praise));
@@ -372,9 +386,15 @@ function showResult(mode, res, data) {
   else fb.appendChild(fbCard('good', ['🎉', 'パーフェクト！', 'きびしい 基準を 全部 クリア！']));
   const SYM = { 2: '◎', 1: '○', 0: '△' }, CLS = { 2: 'ok', 1: 'mid', 0: 'no' };
   const mWrap = $('metrics'); mWrap.innerHTML = '';
-  res.metrics.forEach((m) => { const L = lvl(m); const d = document.createElement('div'); d.className = 'metric ' + CLS[L];
-    d.innerHTML = `<div class="v">${SYM[L]} ${m.value}</div><div class="l">${m.label}</div>`; mWrap.appendChild(d); });
-  saveSession(mode, stars, good, res.metrics.length);
+  res.metrics.forEach((m) => {
+    const d = document.createElement('div');
+    if (m.skip) { d.className = 'metric skip';
+      d.innerHTML = `<div class="v">—</div><div class="l">${m.label}<br><span style="font-size:10px">この角度では はかれません</span></div>`; }
+    else { const L = lvl(m); d.className = 'metric ' + CLS[L];
+      d.innerHTML = `<div class="v">${SYM[L]} ${m.value}</div><div class="l">${m.label}</div>`; }
+    mWrap.appendChild(d);
+  });
+  saveSession(mode, stars, good, total);
   showScreen('result');
   setupResultVideo(data, res); // after the screen is visible so the video has a size
 }
@@ -439,6 +459,7 @@ function showHistory() {
 
 // ---- flow ----
 let currentMode = 'shoot';
+let currentAngle = 'side'; // 'front' | 'side' — chosen on the angle screen
 let currentUrl = null;
 function leaveResult() {
   const vid = $('resultVideo');
@@ -456,7 +477,7 @@ async function handleFile(file) {
     const data = await analyzeFile(file);
     const res = ANALYZERS[baseOf(currentMode)](data);
     if (!res.metrics.length) { URL.revokeObjectURL(data.url); throw new Error('no-pose'); }
-    gradeAll(currentMode, res.metrics); // grade vs the (sub-)mode's お手本 if set, else default bars
+    gradeAll(currentMode, res.metrics, currentAngle); // grade vs お手本/default, skipping what this angle can't measure
     currentUrl = data.url; // kept alive for result playback; revoked on leave
     showResult(currentMode, res, data);
   } catch (e) {
@@ -470,14 +491,22 @@ async function handleFile(file) {
   }
 }
 
+function showAngleScreen() {
+  const reco = ANGLE_RECO[currentMode] || 'side';
+  $('angleReco').innerHTML = `この技は <b>${reco === 'front' ? '正面' : '横（側面）'}</b> が おすすめ。<br>えらんだ 角度で <b>はかれる項目だけ</b> 採点します。`;
+  showScreen('angle');
+}
 document.querySelectorAll('.mode-btn[data-mode]').forEach((btn) =>
   btn.addEventListener('click', () => {
     const mode = btn.dataset.mode;
     if (mode === 'dribble') { showScreen('dribsub'); return; } // pick a move type first
-    currentMode = mode; $('videoInput').value = ''; $('videoInput').click();
+    currentMode = mode; showAngleScreen();
   }));
 document.querySelectorAll('.mode-btn[data-sub]').forEach((btn) =>
-  btn.addEventListener('click', () => { currentMode = btn.dataset.sub; $('videoInput').value = ''; $('videoInput').click(); }));
+  btn.addEventListener('click', () => { currentMode = btn.dataset.sub; showAngleScreen(); }));
+document.querySelectorAll('#screen-angle [data-angle]').forEach((btn) =>
+  btn.addEventListener('click', () => { currentAngle = btn.dataset.angle; $('videoInput').value = ''; $('videoInput').click(); }));
+$('angleBack').addEventListener('click', () => showScreen(currentMode && currentMode.indexOf('dribble') === 0 ? 'dribsub' : 'home'));
 $('dribsubBack').addEventListener('click', () => showScreen('home'));
 $('videoInput').addEventListener('change', (e) => handleFile(e.target.files[0]));
 $('againBtn').addEventListener('click', () => { leaveResult(); $('videoInput').value = ''; showScreen('home'); });

@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<meta name="robots" content="noindex" />
+<title>複数人検出テスト（MultiPose・実機検証）</title>
+<style>
+  :root{--bg:#0e1320;--card:#151c2b;--card2:#1a2233;--line:#26314a;--ink:#eef2f7;--muted:#9fb2cc;
+    --orange:#ff8a2b;--cyan:#34d3ee;--good:#3fe0a2;--red:#ff6b6b}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:-apple-system,"Hiragino Sans",sans-serif;padding:16px;line-height:1.7}
+  .wrap{max-width:520px;margin:0 auto}
+  h1{font-size:20px;margin:4px 0 6px}
+  p.lead{color:var(--muted);font-size:14px;margin:0 0 14px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;margin-bottom:12px}
+  video,canvas{width:100%;border-radius:12px;background:#000;display:block}
+  button{font-size:16px;font-weight:800;border:none;border-radius:12px;padding:14px;width:100%;margin-top:8px;cursor:pointer;color:#0e1320;background:var(--orange)}
+  button:disabled{opacity:.4}
+  .status{font-size:13px;color:var(--muted);margin:8px 0;min-height:20px}
+  .stat{display:flex;justify-content:space-between;border-top:1px solid var(--line);padding:8px 0;font-size:14px}
+  .stat:first-child{border-top:none}
+  .stat b{font-weight:800}
+  .ok{color:var(--good)}.bad{color:var(--red)}
+  .legend{display:flex;gap:14px;font-size:13px;margin:8px 0}
+  .legend span{display:flex;align-items:center;gap:6px}
+  .dot{width:12px;height:12px;border-radius:50%}
+  .diag{font-size:12px;color:var(--muted);white-space:pre-wrap;background:var(--card2);border-radius:10px;padding:10px;margin-top:6px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>👥 複数人検出テスト（MultiPose）</h1>
+  <p class="lead">1on1の動画で <b>2人を ちゃんと検出できるか</b> の実機検証用。アプリ本体とは別物です。<br>固定アングル・横向き・2人が フレームに入る動画で 試してください。</p>
+
+  <div class="card">
+    <video id="prev" playsinline webkit-playsinline muted></video>
+    <canvas id="draw" style="margin-top:8px;display:none"></canvas>
+    <div class="legend"><span><span class="dot" style="background:#ff8a2b"></span>選手1</span><span><span class="dot" style="background:#34d3ee"></span>選手2</span></div>
+    <button id="pick">① 1on1の どうがを えらぶ</button>
+    <div class="status" id="status">動画を えらんでください。</div>
+  </div>
+
+  <div class="card" id="resultCard" style="display:none">
+    <div style="font-weight:800;margin-bottom:6px">けっか</div>
+    <div id="stats"></div>
+  </div>
+
+  <div class="card">
+    <div style="font-weight:800;font-size:14px;margin-bottom:6px">診断（このテキストを 送ってください）</div>
+    <div class="diag" id="diag">起動待ち…</div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-core@4.20.0/dist/tf-core.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-converter@4.20.0/dist/tf-converter.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-webgl@4.20.0/dist/tf-backend-webgl.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection@2.1.3/dist/pose-detection.min.js"></script>
+<script>
+(function(){
+  var prev=document.getElementById('prev'), draw=document.getElementById('draw'), status=document.getElementById('status'),
+      diag=document.getElementById('diag'), pick=document.getElementById('pick'), input,
+      resultCard=document.getElementById('resultCard'), statsEl=document.getElementById('stats');
+  var detector=null;
+  function log(extra){ var L=['UA: '+navigator.userAgent.slice(0,60)+'…','MultiPose: '+(detector?'ロード済み':'未'),'WebGL: '+(window.WebGLRenderingContext?'あり':'なし')];
+    if(extra) L=L.concat(extra); diag.textContent=L.join('\n'); }
+  log();
+  input=document.createElement('input'); input.type='file'; input.accept='video/*'; input.style.display='none'; document.body.appendChild(input);
+  pick.onclick=function(){ input.value=''; input.click(); };
+  input.onchange=function(e){ if(e.target.files[0]) run(e.target.files[0]); };
+
+  function angle(a,b,c){ if(!a||!b||!c) return null; var ab={x:a.x-b.x,y:a.y-b.y},cb={x:c.x-b.x,y:c.y-b.y};
+    var dot=ab.x*cb.x+ab.y*cb.y, cr=ab.x*cb.y-ab.y*cb.x; return Math.abs(Math.atan2(cr,dot)*180/Math.PI); }
+  function kp(p,n){ var k=p.byName[n]; return k&&k.score>0.3?k:null; }
+  function byName(pose){ var o={}; pose.keypoints.forEach(function(k){o[k.name]=k;}); return {byName:o, score:pose.score, cx:centerX(o)}; }
+  function centerX(o){ var ls=o.left_shoulder,rs=o.right_shoulder,lh=o.left_hip,rh=o.right_hip,xs=[],n=0;
+    [ls,rs,lh,rh].forEach(function(k){ if(k&&k.score>0.2){xs.push(k.x);n++;} }); if(!n) return 160; return xs.reduce(function(a,b){return a+b;},0)/n; }
+
+  async function getDet(){ if(detector) return detector; await tf.setBackend('webgl'); await tf.ready();
+    detector=await poseDetection.createDetector(poseDetection.SupportedModels.MoveNet,{modelType:poseDetection.movenet.modelType.MULTIPOSE_LIGHTNING}); return detector; }
+
+  async function run(file){
+    resultCard.style.display='none'; draw.style.display='none';
+    status.textContent='モデルを よみこみ中…';
+    try{ await getDet(); }catch(err){ status.innerHTML='<span class="bad">モデルを 読めません：'+err.message+'</span>'; return; }
+    log();
+    var url=URL.createObjectURL(file); prev.src=url; prev.muted=true;
+    await new Promise(function(res,rej){ prev.onloadedmetadata=res; prev.onerror=function(){rej(new Error('load'));}; setTimeout(res,4000); }).catch(function(){});
+    var dur=prev.duration||0; var W=320, Hh=Math.round(320*(prev.videoHeight||568)/(prev.videoWidth||320));
+    var cv=document.createElement('canvas'); cv.width=W; cv.height=Hh; var ctx=cv.getContext('2d');
+    var frames=0, twoPlus=0, maxP=0, best={n:-1,img:null,poses:null};
+    var t1Knee=[], t2Knee=[]; // per-player (left=1, right=2) knee angles
+    status.textContent='● 解析中…（動画を 再生します）';
+    var useRVFC = typeof prev.requestVideoFrameCallback==='function';
+    var lastT=-1, busy=false, finished=false;
+    await new Promise(function(resolve){
+      var fin=function(){ if(finished) return; finished=true; resolve(); };
+      async function sample(){
+        if(finished||busy) return; var t=prev.currentTime; if(lastT>=0 && t-lastT<0.16) return; lastT=t; busy=true;
+        try{
+          ctx.drawImage(prev,0,0,W,Hh);
+          var poses=await detector.estimatePoses(cv,{maxPoses:4,flipHorizontal:false});
+          var ppl=poses.filter(function(p){return p.score>0.3 && p.keypoints.filter(function(k){return k.score>0.3;}).length>=6;})
+                       .map(byName).sort(function(a,b){return a.cx-b.cx;}); // left -> right
+          frames++; if(ppl.length>=2) twoPlus++; if(ppl.length>maxP) maxP=ppl.length;
+          if(ppl.length>=2){ // record knees for the 2 main (left/right)
+            [[ppl[0],t1Knee],[ppl[1],t2Knee]].forEach(function(pair){ var p=pair[0];
+              var kR=angle(kp(p,'right_hip'),kp(p,'right_knee'),kp(p,'right_ankle'));
+              var kL=angle(kp(p,'left_hip'),kp(p,'left_knee'),kp(p,'left_ankle'));
+              var k=kR!=null?kR:kL; if(k!=null) pair[1].push(k); });
+          }
+          if(ppl.length>maxP-0.001 && ppl.length>=2 && (best.n<ppl.length)){ best={n:ppl.length,img:ctx.getImageData(0,0,W,Hh),poses:ppl}; }
+          status.textContent='● 解析中… '+Math.min(99,Math.round(t/dur*100))+'%（人数 '+ppl.length+'）';
+        }catch(err){} busy=false;
+      }
+      function loop(){ sample().then(function(){ if(!finished&&useRVFC) prev.requestVideoFrameCallback(loop); }); }
+      prev.onended=fin; setTimeout(fin, (dur||8)*1000+9000);
+      prev.play().then(function(){ if(useRVFC) prev.requestVideoFrameCallback(loop); else prev.ontimeupdate=sample; }).catch(fin);
+    });
+    URL.revokeObjectURL(url);
+    var rate=frames? Math.round(twoPlus/frames*100):0;
+    var avg=function(a){ return a.length? Math.round(a.reduce(function(x,y){return x+y;},0)/a.length):'—'; };
+    var verdict = rate>=60? '<span class="ok">良好：両選手を よく 検出できています</span>' : rate>=30? '両選手の 検出は ときどき（角度/距離を 調整）' : '<span class="bad">2人の 検出が 不安定（横向き・両者が 大きく 映るように）</span>';
+    statsEl.innerHTML =
+      '<div class="stat"><span>解析フレーム</span><b>'+frames+'</b></div>'
+      +'<div class="stat"><span>最大 検出人数</span><b>'+maxP+' 人</b></div>'
+      +'<div class="stat"><span>2人以上 検出できた率</span><b>'+rate+'%</b></div>'
+      +'<div class="stat"><span>選手1 平均ひざ角度</span><b>'+avg(t1Knee)+'°</b></div>'
+      +'<div class="stat"><span>選手2 平均ひざ角度</span><b>'+avg(t2Knee)+'°</b></div>'
+      +'<div class="stat"><span>判定</span><b>'+verdict+'</b></div>';
+    resultCard.style.display='block';
+    // draw both skeletons on the best frame
+    if(best.img){ draw.width=W; draw.height=Hh; var dx=draw.getContext('2d'); dx.putImageData(best.img,0,0);
+      var cols=['#ff8a2b','#34d3ee','#3fe0a2']; var pairs=[['left_shoulder','left_elbow'],['left_elbow','left_wrist'],['right_shoulder','right_elbow'],['right_elbow','right_wrist'],['left_shoulder','left_hip'],['right_shoulder','right_hip'],['left_hip','left_knee'],['left_knee','left_ankle'],['right_hip','right_knee'],['right_knee','right_ankle'],['left_shoulder','right_shoulder'],['left_hip','right_hip']];
+      best.poses.slice(0,3).forEach(function(p,i){ dx.strokeStyle=cols[i]; dx.fillStyle=cols[i]; dx.lineWidth=3; dx.lineCap='round';
+        pairs.forEach(function(pr){ var a=kp(p,pr[0]),b=kp(p,pr[1]); if(a&&b){ dx.beginPath(); dx.moveTo(a.x,a.y); dx.lineTo(b.x,b.y); dx.stroke(); } });
+        p.keypoints.forEach(function(k){ if(k.score>0.3){ dx.beginPath(); dx.arc(k.x,k.y,3,0,7); dx.fill(); } });
+      });
+      draw.style.display='block';
+    }
+    status.innerHTML = '完了。けっかと 診断を 確認してください。';
+    log(['解析フレーム: '+frames, '最大人数: '+maxP, '2人検出率: '+rate+'%']);
+  }
+})();
+</script>
+</body>
+</html>

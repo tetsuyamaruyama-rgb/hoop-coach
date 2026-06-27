@@ -49,53 +49,76 @@ async function getDetector() {
 }
 
 // ---- frame sampling ----
-function loadVideo(file) {
+// Create a muted, inline, on-DOM video. iOS only decodes/plays video that is
+// attached and muted — an off-screen detached element never fires its events.
+function makeScanVideo(file) {
   return new Promise((resolve, reject) => {
     const v = document.createElement('video');
-    v.preload = 'auto'; v.muted = true; v.playsInline = true;
+    v.muted = true; v.defaultMuted = true; v.playsInline = true;
+    v.setAttribute('muted', ''); v.setAttribute('playsinline', ''); v.setAttribute('webkit-playsinline', '');
+    v.preload = 'auto';
+    v.style.cssText = 'position:fixed;left:0;top:0;width:2px;height:2px;opacity:0.01;pointer-events:none;z-index:-1';
     v.src = URL.createObjectURL(file);
-    v.onloadeddata = () => resolve(v);
-    v.onerror = () => reject(new Error('video-load'));
+    document.body.appendChild(v);
+    let done = false; const ok = () => { if (!done) { done = true; resolve(v); } };
+    v.onloadedmetadata = ok;
+    v.onerror = () => { if (!done) { done = true; reject(new Error('video-load')); } };
+    setTimeout(ok, 4000); // proceed even if the event is flaky on iOS
   });
 }
-// iOS-robust seek: wait for 'seeked' AND two animation frames so the frame is
-// actually painted before we draw it; hard timeout so we never hang.
-function seek(video, t) {
-  return new Promise((resolve) => {
-    let done = false; const ok = () => { if (!done) { done = true; resolve(); } };
-    video.onseeked = () => requestAnimationFrame(() => requestAnimationFrame(ok));
-    video.currentTime = Math.min(t, Math.max(0, video.duration - 0.05));
-    setTimeout(ok, 900);
-  });
-}
-// Scan the clip storing ONLY keypoints (no per-frame images) — keeps memory tiny
-// so iPhones don't stall. Frame count is bounded for speed/reliability.
+// Scan by PLAYING the clip and sampling frames as they're presented (iOS-safe),
+// storing ONLY keypoints (tiny memory). Never hangs: hard safety timeout.
 async function analyzeFile(file) {
   const det = await getDetector();
-  const video = await loadVideo(file);
-  const dur = video.duration;
-  if (!dur || !isFinite(dur)) throw new Error('no-duration');
-  const vw = video.videoWidth || PROC_W, vh = video.videoHeight || PROC_W;
+  const video = await makeScanVideo(file);
+  let dur = video.duration;
+  if (!dur || !isFinite(dur)) {
+    await new Promise((r) => { video.ondurationchange = r; setTimeout(r, 1500); });
+    dur = video.duration;
+  }
+  if (!isFinite(dur) || dur <= 0) dur = 8;
+  const vw = video.videoWidth || 432, vh = video.videoHeight || 768;
   const w = PROC_W, h = Math.round(PROC_W * vh / vw);
   const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
   const ctx = cv.getContext('2d');
-  const total = Math.max(6, Math.min(30, Math.round(dur * 6)));
+  const targetCount = Math.max(6, Math.min(30, Math.round(dur * 6)));
+  const minGap = dur / targetCount;
   const frames = [];
-  for (let i = 0; i < total; i++) {
-    const t = (i + 0.5) * dur / total;
-    await seek(video, t);
-    if (video.readyState >= 2) {
-      ctx.drawImage(video, 0, 0, w, h);
-      const poses = await det.estimatePoses(cv, { maxPoses: 1, flipHorizontal: false });
-      if (poses[0] && poses[0].keypoints.filter((k) => k.score > 0.3).length >= 6) {
-        const byName = {}; poses[0].keypoints.forEach((k) => (byName[k.name] = k));
-        frames.push({ t, byName });
-      }
-    }
-    $('progressBar').style.width = Math.round(((i + 1) / total) * 100) + '%';
-  }
-  if (frames.length < 4) { URL.revokeObjectURL(video.src); throw new Error('no-pose'); }
-  return { frames, w, h, video };
+  let lastT = -1, busy = false, finished = false;
+
+  await new Promise((resolve) => {
+    const finish = () => { if (finished) return; finished = true; $('progressBar').style.width = '100%'; resolve(); };
+    const sample = async () => {
+      if (finished || busy) return;
+      const t = video.currentTime;
+      if (lastT >= 0 && t - lastT < minGap * 0.9) return;
+      busy = true; lastT = t;
+      try {
+        ctx.drawImage(video, 0, 0, w, h);
+        const poses = await det.estimatePoses(cv, { maxPoses: 1, flipHorizontal: false });
+        if (poses[0] && poses[0].keypoints.filter((k) => k.score > 0.3).length >= 6) {
+          const byName = {}; poses[0].keypoints.forEach((k) => (byName[k.name] = k));
+          frames.push({ t, byName });
+        }
+      } catch (e) {}
+      busy = false;
+      $('progressBar').style.width = Math.min(99, Math.round((t / dur) * 100)) + '%';
+    };
+    const useRVFC = typeof video.requestVideoFrameCallback === 'function';
+    const loop = async () => { await sample(); if (!finished && useRVFC) video.requestVideoFrameCallback(loop); };
+    video.onended = finish;
+    setTimeout(finish, dur * 1000 + 9000); // absolute safety: never hang
+    video.play().then(() => {
+      if (useRVFC) video.requestVideoFrameCallback(loop);
+      else video.ontimeupdate = sample; // fallback for old iOS
+    }).catch(() => finish());
+  });
+
+  const url = video.src; // keep the object URL alive for result playback
+  try { video.pause(); } catch (e) {}
+  try { document.body.removeChild(video); } catch (e) {}
+  if (frames.length < 4) { URL.revokeObjectURL(url); throw new Error('no-pose'); }
+  return { frames, w, h, url };
 }
 
 // ---- side / key-frame pickers ----
@@ -261,7 +284,7 @@ function setupResultVideo(data, res) {
   vid.onended = () => freeze();
   $('replayBtn').onclick = () => { frozen = false; clear(); try { vid.currentTime = 0; } catch (e) {}
     vid.play().catch(() => { frozen = true; vid.currentTime = keyTime; }); };
-  vid.src = data.video.src;
+  vid.src = data.url;
   try { vid.currentTime = 0; } catch (e) {}
   clear();
   // autoplay through once; if blocked, just show the key frame with marks
@@ -367,8 +390,8 @@ async function handleFile(file) {
     $('loadingMsg').textContent = 'AIコーチが みているよ…';
     const data = await analyzeFile(file);
     const res = ANALYZERS[currentMode](data);
-    if (!res.metrics.length) { URL.revokeObjectURL(data.video.src); throw new Error('no-pose'); }
-    currentUrl = data.video.src; // kept alive for result playback; revoked on leave
+    if (!res.metrics.length) { URL.revokeObjectURL(data.url); throw new Error('no-pose'); }
+    currentUrl = data.url; // kept alive for result playback; revoked on leave
     showResult(currentMode, res, data);
   } catch (e) {
     const map = {

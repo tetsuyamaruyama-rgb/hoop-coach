@@ -720,9 +720,19 @@ function recStartSeg() {
   recRecorder.start();
   $('recPossN').textContent = recClips.length + 1; // possession currently being recorded
 }
+async function saveClip(blob, name) {
+  if (!blob) return;
+  const file = new File([blob], name, { type: blob.type || 'video/mp4' });
+  if (navigator.canShare && navigator.canShare({ files: [file] })) {
+    try { await navigator.share({ files: [file] }); return; } catch (e) { if (e && e.name === 'AbortError') return; }
+  }
+  const url = URL.createObjectURL(blob); const a = document.createElement('a');
+  a.href = url; a.download = name; a.target = '_blank'; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 15000);
+}
 function recOnSegStop() {
   const blob = new Blob(recChunks, { type: (recChunks[0] && recChunks[0].type) || recMime || 'video/mp4' });
-  recN++; recClips.push({ n: recN, off: recSegRoles.off, def: recSegRoles.def, dur: Math.max(0, (Date.now() - recSegStart) / 1000), url: URL.createObjectURL(blob) });
+  recN++; recClips.push({ n: recN, off: recSegRoles.off, def: recSegRoles.def, dur: Math.max(0, (Date.now() - recSegStart) / 1000), url: URL.createObjectURL(blob), blob });
   if (!recEnding) { recStartSeg(); }
   else { recStopCamera(); renderClips(); showScreen('1on1-clips'); }
 }
@@ -734,8 +744,11 @@ function renderClips() {
     const row = document.createElement('div'); row.className = 'clip-row';
     row.innerHTML = `<video src="${c.url}" playsinline muted></video>`
       + `<div class="ci"><b>ポゼッション${c.n}</b><span>攻 ${nameOf(c.off)} / 守 ${nameOf(c.def)} ・ 約${c.dur.toFixed(1)}秒</span></div>`
-      + `<button class="rev">レビュー</button>`;
+      + `<div style="display:flex;flex-direction:column;gap:6px">`
+      + `<button class="rev">レビュー</button>`
+      + `<button class="clip-save">💾 保存</button></div>`;
     row.querySelector('.rev').onclick = () => { buildOneon(c.off, c.def, c.url); showScreen('1on1-result'); };
+    row.querySelector('.clip-save').onclick = () => saveClip(c.blob, `1on1_p${c.n}.mp4`);
     list.appendChild(row);
   });
 }

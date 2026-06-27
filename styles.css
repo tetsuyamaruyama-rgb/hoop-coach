@@ -176,5 +176,7 @@ header h1 span{color:var(--orange)}
   border-radius:12px;padding:10px;margin-bottom:8px}
 .clip-row video{width:92px;height:56px;border-radius:8px;background:#000;flex:none;object-fit:cover}
 .clip-row .ci{flex:1}.clip-row .ci b{display:block;font-size:14px}.clip-row .ci span{font-size:12px;color:var(--muted)}
-.clip-row .rev{font-size:13px;font-weight:800;border:none;border-radius:10px;padding:8px 14px;
-  background:var(--orange);color:#1a1207;cursor:pointer}
+.clip-row .rev{font-size:13px;font-weight:800;border:none;border-radius:10px;padding:7px 14px;
+  background:var(--orange);color:#1a1207;cursor:pointer;white-space:nowrap}
+.clip-row .clip-save{font-size:12px;font-weight:800;border:1px solid var(--line);border-radius:10px;
+  padding:7px 12px;background:var(--card2);color:var(--orange-l);cursor:pointer;white-space:nowrap}

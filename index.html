@@ -10,7 +10,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="バスケコーチ" />
   <link rel="apple-touch-icon" href="icons/icon-180.png" />
-  <link rel="stylesheet" href="styles.css?v=13" />
+  <link rel="stylesheet" href="styles.css?v=14" />
 </head>
 <body>
   <div id="app">
@@ -81,6 +81,17 @@
       <div id="histList"></div>
       <button class="big-btn secondary" id="histBackBtn">⬅️ もどる</button>
       <button class="link-btn danger" id="clearBtn">🗑️ きろくを ぜんぶ けす</button>
+    </section>
+
+    <!-- dribble move-type sub-menu -->
+    <section id="screen-dribsub" class="screen">
+      <h2 class="h2">⛹️ ドリブル ・ しゅるい</h2>
+      <p class="note" style="margin:0 0 12px">どの ドリブルを みる？（技ごとに お手本で 採点）</p>
+      <button class="mode-btn dribble" data-sub="dribble_normal"><span class="emoji">🏀</span><span class="t">ノーマル</span><small>ふつうの ドリブル</small></button>
+      <button class="mode-btn dribble" data-sub="dribble_front"><span class="emoji">🔄</span><span class="t">フロントチェンジ</span><small>体の前で 左右に かえる</small></button>
+      <button class="mode-btn dribble" data-sub="dribble_back"><span class="emoji">🔙</span><span class="t">バックチェンジ</span><small>背中の うしろを とおす</small></button>
+      <button class="mode-btn dribble" data-sub="dribble_legthru"><span class="emoji">🦵</span><span class="t">レッグスルー</span><small>足の あいだを とおす</small></button>
+      <button class="big-btn secondary" id="dribsubBack">⬅️ もどる</button>
     </section>
 
     <!-- 1on1 setup -->
@@ -168,6 +179,6 @@
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-converter@4.20.0/dist/tf-converter.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-webgl@4.20.0/dist/tf-backend-webgl.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection@2.1.3/dist/pose-detection.min.js"></script>
-  <script src="app.js?v=13"></script>
+  <script src="app.js?v=14"></script>
 </body>
 </html>

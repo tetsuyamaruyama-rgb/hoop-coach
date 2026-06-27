@@ -283,7 +283,14 @@ function analyzeDefense({ frames }) {
 }
 
 const ANALYZERS = { shoot: analyzeShooting, dribble: analyzeDribble, defense: analyzeDefense };
-const MODE_LABEL = { shoot: '🎯 シュート', dribble: '⛹️ ドリブル', defense: '🛡️ ディフェンス' };
+// dribble move types — each gets its own お手本 + grading (same measurements, move-specific reference)
+const DRIBBLE_SUBS = [['dribble_normal', 'ノーマル'], ['dribble_front', 'フロントチェンジ'], ['dribble_back', 'バックチェンジ'], ['dribble_legthru', 'レッグスルー']];
+const baseOf = (m) => (m && m.indexOf('dribble') === 0 ? 'dribble' : m); // analyzer key for any dribble sub-mode
+const MODE_LABEL = {
+  shoot: '🎯 シュート', dribble: '⛹️ ドリブル', defense: '🛡️ ディフェンス',
+  dribble_normal: '⛹️ ドリブル：ノーマル', dribble_front: '⛹️ ドリブル：フロントチェンジ',
+  dribble_back: '⛹️ ドリブル：バックチェンジ', dribble_legthru: '⛹️ ドリブル：レッグスルー',
+};
 const MODE_ERR = {
   shoot: 'からだが よく うつってなかったみたい。よこ から、ぜんしんが うつるように とってね。',
   dribble: 'からだが よく うつってなかったみたい。ぜんしんが うつるように とってね。',
@@ -447,14 +454,14 @@ async function handleFile(file) {
     await getDetector();
     $('loadingMsg').textContent = 'AIコーチが みているよ…';
     const data = await analyzeFile(file);
-    const res = ANALYZERS[currentMode](data);
+    const res = ANALYZERS[baseOf(currentMode)](data);
     if (!res.metrics.length) { URL.revokeObjectURL(data.url); throw new Error('no-pose'); }
-    gradeAll(currentMode, res.metrics); // grade vs お手本 if set, else default bars
+    gradeAll(currentMode, res.metrics); // grade vs the (sub-)mode's お手本 if set, else default bars
     currentUrl = data.url; // kept alive for result playback; revoked on leave
     showResult(currentMode, res, data);
   } catch (e) {
     const map = {
-      'no-pose': MODE_ERR[currentMode],
+      'no-pose': MODE_ERR[baseOf(currentMode)],
       'video-load': 'どうがを よみこめなかったよ。べつの どうがで ためしてね。',
       'no-duration': 'どうがの ながさが わからなかったよ。べつの どうがで ためしてね。',
     };
@@ -463,8 +470,15 @@ async function handleFile(file) {
   }
 }
 
-document.querySelectorAll('.mode-btn').forEach((btn) =>
-  btn.addEventListener('click', () => { currentMode = btn.dataset.mode; $('videoInput').value = ''; $('videoInput').click(); }));
+document.querySelectorAll('.mode-btn[data-mode]').forEach((btn) =>
+  btn.addEventListener('click', () => {
+    const mode = btn.dataset.mode;
+    if (mode === 'dribble') { showScreen('dribsub'); return; } // pick a move type first
+    currentMode = mode; $('videoInput').value = ''; $('videoInput').click();
+  }));
+document.querySelectorAll('.mode-btn[data-sub]').forEach((btn) =>
+  btn.addEventListener('click', () => { currentMode = btn.dataset.sub; $('videoInput').value = ''; $('videoInput').click(); }));
+$('dribsubBack').addEventListener('click', () => showScreen('home'));
 $('videoInput').addEventListener('change', (e) => handleFile(e.target.files[0]));
 $('againBtn').addEventListener('click', () => { leaveResult(); $('videoInput').value = ''; showScreen('home'); });
 $('errorBackBtn').addEventListener('click', () => { $('videoInput').value = ''; showScreen('home'); });
@@ -755,7 +769,10 @@ $('clipsBack').addEventListener('click', () => showScreen('1on1'));
 
 // ---- お手本 (coach reference) registration ----
 let pendingModelMode = null;
-const MODEL_MODES = [['shoot', '🎯 シュート'], ['dribble', '⛹️ ドリブル'], ['defense', '🛡️ ディフェンス']];
+const MODEL_MODES = [['shoot', '🎯 シュート'],
+  ['dribble_normal', '⛹️ ドリブル：ノーマル'], ['dribble_front', '⛹️ ：フロントチェンジ'],
+  ['dribble_back', '⛹️ ：バックチェンジ'], ['dribble_legthru', '⛹️ ：レッグスルー'],
+  ['defense', '🛡️ ディフェンス']];
 function renderModelScreen() {
   const ref = loadModel(); const list = $('modelList'); list.innerHTML = '';
   MODEL_MODES.forEach(([mode, label]) => {
@@ -780,7 +797,7 @@ async function handleModelFile(file) {
   try {
     await getDetector();
     const data = await analyzeFile(file);
-    const res = ANALYZERS[mode](data); URL.revokeObjectURL(data.url);
+    const res = ANALYZERS[baseOf(mode)](data); URL.revokeObjectURL(data.url);
     if (!res.metrics.length) throw new Error('no-pose');
     saveModel(mode, modelVals(res.metrics));
     renderModelScreen(); showScreen('model');

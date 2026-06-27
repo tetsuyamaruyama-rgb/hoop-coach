@@ -1,3 +1,6 @@
 # local helper, not needed for the site
 __pycache__/
 *.pyc
+# never commit practice videos (privacy)
+*.mp4
+*.mov

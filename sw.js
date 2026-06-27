@@ -1,6 +1,6 @@
 // Service worker: cache the app shell + the TensorFlow/MoveNet model so the
 // app works FULLY OFFLINE after the first load. Video is never uploaded.
-const CACHE = 'hoop-coach-v2';
+const CACHE = 'hoop-coach-v3';
 const SHELL = [
   './',
   './index.html',
@@ -24,20 +24,29 @@ self.addEventListener('activate', (e) => {
   );
 });
 
-// Cache-first for everything (shell + CDN scripts + downloaded model weights).
-// On first online load these get cached; afterwards the app runs offline.
 self.addEventListener('fetch', (e) => {
   if (e.request.method !== 'GET') return;
-  e.respondWith(
-    caches.match(e.request).then((hit) => {
-      if (hit) return hit;
-      return fetch(e.request).then((res) => {
+  const url = new URL(e.request.url);
+  const sameOrigin = url.origin === self.location.origin;
+  if (sameOrigin) {
+    // App shell: network-first so updates apply as soon as the phone is online,
+    // falling back to cache when offline.
+    e.respondWith(
+      fetch(e.request).then((res) => {
+        if (res && res.status === 200) { const c = res.clone(); caches.open(CACHE).then((ch) => ch.put(e.request, c)); }
+        return res;
+      }).catch(() => caches.match(e.request))
+    );
+  } else {
+    // CDN (TensorFlow + model weights): cache-first — big and immutable, this is
+    // what makes the app work fully offline at the gym after the first load.
+    e.respondWith(
+      caches.match(e.request).then((hit) => hit || fetch(e.request).then((res) => {
         if (res && res.status === 200 && (res.type === 'basic' || res.type === 'cors')) {
-          const copy = res.clone();
-          caches.open(CACHE).then((c) => c.put(e.request, copy));
+          const c = res.clone(); caches.open(CACHE).then((ch) => ch.put(e.request, c));
         }
         return res;
-      }).catch(() => hit);
-    })
-  );
+      }).catch(() => hit))
+    );
+  }
 });

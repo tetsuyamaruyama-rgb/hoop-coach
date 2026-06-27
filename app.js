@@ -8,6 +8,8 @@
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
 }
+// warm up the pose model early so picking a video isn't blocked by a cold load
+window.addEventListener('load', () => { setTimeout(() => getDetector().catch(() => {}), 300); });
 
 // ---- helpers ----
 const $ = (id) => document.getElementById(id);
@@ -56,39 +58,51 @@ function loadVideo(file) {
     v.onerror = () => reject(new Error('video-load'));
   });
 }
+// iOS-robust seek: wait for 'seeked' AND two animation frames so the frame is
+// actually painted before we draw it; hard timeout so we never hang.
 function seek(video, t) {
   return new Promise((resolve) => {
     let done = false; const ok = () => { if (!done) { done = true; resolve(); } };
-    video.onseeked = ok;
-    video.currentTime = Math.min(t, Math.max(0, video.duration - 0.02));
-    setTimeout(ok, 600);
+    video.onseeked = () => requestAnimationFrame(() => requestAnimationFrame(ok));
+    video.currentTime = Math.min(t, Math.max(0, video.duration - 0.05));
+    setTimeout(ok, 900);
   });
 }
+// Scan the clip storing ONLY keypoints (no per-frame images) — keeps memory tiny
+// so iPhones don't stall. Frame count is bounded for speed/reliability.
 async function analyzeFile(file) {
   const det = await getDetector();
   const video = await loadVideo(file);
   const dur = video.duration;
   if (!dur || !isFinite(dur)) throw new Error('no-duration');
-  const total = Math.max(6, Math.min(70, Math.floor(dur * 12)));
-  const scale = PROC_W / (video.videoWidth || PROC_W);
-  const w = Math.round((video.videoWidth || PROC_W) * scale);
-  const h = Math.round((video.videoHeight || PROC_W) * scale);
+  const vw = video.videoWidth || PROC_W, vh = video.videoHeight || PROC_W;
+  const w = PROC_W, h = Math.round(PROC_W * vh / vw);
   const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
   const ctx = cv.getContext('2d');
+  const total = Math.max(6, Math.min(30, Math.round(dur * 6)));
   const frames = [];
   for (let i = 0; i < total; i++) {
-    await seek(video, i * (dur / total));
-    ctx.drawImage(video, 0, 0, w, h);
-    const poses = await det.estimatePoses(cv, { maxPoses: 1, flipHorizontal: false });
-    if (poses[0]) {
-      const byName = {}; poses[0].keypoints.forEach((k) => (byName[k.name] = k));
-      frames.push({ byName, img: ctx.getImageData(0, 0, w, h) });
+    const t = (i + 0.5) * dur / total;
+    await seek(video, t);
+    if (video.readyState >= 2) {
+      ctx.drawImage(video, 0, 0, w, h);
+      const poses = await det.estimatePoses(cv, { maxPoses: 1, flipHorizontal: false });
+      if (poses[0] && poses[0].keypoints.filter((k) => k.score > 0.3).length >= 6) {
+        const byName = {}; poses[0].keypoints.forEach((k) => (byName[k.name] = k));
+        frames.push({ t, byName });
+      }
     }
     $('progressBar').style.width = Math.round(((i + 1) / total) * 100) + '%';
   }
-  URL.revokeObjectURL(video.src);
-  if (frames.length < 4) throw new Error('no-pose');
-  return { frames, w, h };
+  if (frames.length < 4) { URL.revokeObjectURL(video.src); throw new Error('no-pose'); }
+  return { frames, w, h, video };
+}
+// grab a single frame's pixels at time t (for drawing the result skeleton)
+async function grabFrame(video, t, w, h) {
+  await seek(video, t);
+  const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
+  cv.getContext('2d').drawImage(video, 0, 0, w, h);
+  return cv;
 }
 
 // ---- side / key-frame pickers ----
@@ -204,10 +218,10 @@ const MODE_ERR = {
 };
 
 // ---- render ----
-function drawSkeleton(canvas, frame, w, h, side) {
+function drawSkeleton(canvas, srcCanvas, frame, w, h, side) {
   canvas.width = w; canvas.height = h;
   const ctx = canvas.getContext('2d');
-  ctx.putImageData(frame.img, 0, 0);
+  ctx.drawImage(srcCanvas, 0, 0, w, h);
   const pairs = [['shoulder', 'elbow'], ['elbow', 'wrist'], ['shoulder', 'hip'], ['hip', 'knee'], ['knee', 'ankle']];
   ctx.lineWidth = Math.max(3, w / 120); ctx.strokeStyle = '#ff7a18'; ctx.lineCap = 'round';
   for (const [a, b] of pairs) { const ka = kp(frame, side + '_' + a), kb = kp(frame, side + '_' + b);
@@ -220,12 +234,12 @@ function fbCard(kind, [ico, title, sub]) {
   d.innerHTML = `<div class="ico">${ico}</div><div class="txt"><b>${title}</b><span>${sub}</span></div>`;
   return d;
 }
-function showResult(mode, res, data) {
+function showResult(mode, res, data, keyCanvas) {
   const good = res.metrics.filter((m) => m.good).length;
   const stars = good >= 3 ? 3 : good === 2 ? 2 : 1;
   $('modeTag').textContent = MODE_LABEL[mode];
   $('scoreStars').textContent = '⭐'.repeat(stars);
-  drawSkeleton($('resultCanvas'), data.frames[res.keyIdx], data.w, data.h, res.side);
+  drawSkeleton($('resultCanvas'), keyCanvas, data.frames[res.keyIdx], data.w, data.h, res.side);
   const goods = res.metrics.filter((m) => m.good), bads = res.metrics.filter((m) => !m.good);
   const fb = $('feedback'); fb.innerHTML = '';
   if (goods[0]) fb.appendChild(fbCard('good', goods[0].praise));
@@ -308,8 +322,10 @@ async function handleFile(file) {
     $('loadingMsg').textContent = 'AIコーチが みているよ…';
     const data = await analyzeFile(file);
     const res = ANALYZERS[currentMode](data);
-    if (!res.metrics.length) throw new Error('no-pose');
-    showResult(currentMode, res, data);
+    if (!res.metrics.length) { URL.revokeObjectURL(data.video.src); throw new Error('no-pose'); }
+    const keyCanvas = await grabFrame(data.video, data.frames[res.keyIdx].t, data.w, data.h);
+    URL.revokeObjectURL(data.video.src);
+    showResult(currentMode, res, data, keyCanvas);
   } catch (e) {
     const map = {
       'no-pose': MODE_ERR[currentMode],

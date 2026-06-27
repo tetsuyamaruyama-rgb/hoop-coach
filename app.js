@@ -142,11 +142,43 @@ function deepestKneeIdx(frames, side) {
   return idx;
 }
 
-// ---- grading: 3 tiers (2=◎ strict / 1=○ ok / 0=△ needs work). Bars set demanding. ----
+// ---- grading: 3 tiers (2=◎ / 1=○ / 0=△). Graded vs the coach's お手本 if set,
+//      otherwise vs demanding default bars. ----
 const lvlLow = (v, good, ok) => (v <= good ? 2 : v <= ok ? 1 : 0);  // smaller is better
 const lvlHigh = (v, good, ok) => (v >= good ? 2 : v >= ok ? 1 : 0); // larger is better
 const lvlBand = (v, gLo, gHi, oLo, oHi) => (v >= gLo && v <= gHi ? 2 : v >= oLo && v <= oHi ? 1 : 0);
 function metric(level, value, label, praise, tip) { return { level, good: level === 2, value, label, praise, tip }; }
+// richer metric: carries the raw measurement + direction so it can be graded
+// against EITHER the お手本 or the default bars.
+function mtr(key, raw, dir, good, ok, valNum, valWords, label, praise, tip) {
+  return { key, raw, dir, good, ok, valNum, valWords, label, praise, tip };
+}
+function gradeDefault(m) {
+  if (m.dir === 'low') return lvlLow(m.raw, m.good, m.ok);
+  if (m.dir === 'high') return lvlHigh(m.raw, m.good, m.ok);
+  return lvlBand(m.raw, m.good[0], m.good[1], m.ok[0], m.ok[1]); // band
+}
+function gradeVsModel(m, target) { // how close to the お手本's measured value
+  if (m.dir === 'low') return m.raw <= target * 1.04 ? 2 : m.raw <= target * 1.12 ? 1 : 0;
+  if (m.dir === 'high') return m.raw >= target * 0.96 ? 2 : m.raw >= target * 0.88 ? 1 : 0;
+  const d = Math.abs(m.raw - target) / (target || 1); return d <= 0.15 ? 2 : d <= 0.30 ? 1 : 0;
+}
+// ---- お手本 (coach reference) storage: measured target values per skill, on-device ----
+const MODEL_KEY = 'hoopModel_v1';
+function loadModel() { try { return JSON.parse(localStorage.getItem(MODEL_KEY)) || {}; } catch (e) { return {}; } }
+function saveModel(mode, vals) { const m = loadModel(); m[mode] = vals; try { localStorage.setItem(MODEL_KEY, JSON.stringify(m)); } catch (e) {} }
+function clearModel(mode) { const m = loadModel(); delete m[mode]; try { localStorage.setItem(MODEL_KEY, JSON.stringify(m)); } catch (e) {} }
+function modelVals(metrics) { const o = {}; metrics.forEach((x) => { if (x.raw != null) o[x.key] = x.raw; }); return o; }
+function gradeAll(mode, metrics) {
+  const ref = loadModel()[mode];
+  metrics.forEach((m) => {
+    if (m.level != null) return; // already a fixed-level metric (legacy)
+    const L = (ref && ref[m.key] != null) ? gradeVsModel(m, ref[m.key]) : gradeDefault(m);
+    m.level = L; m.good = L === 2;
+    m.value = (m.valNum != null) ? m.valNum : (m.valWords ? m.valWords[L] : '');
+  });
+  return metrics;
+}
 
 // ---- analyzers: each returns {keyIdx, side, metrics:[{level,value,label,praise,tip}]} ----
 function analyzeShooting({ frames }) {
@@ -164,7 +196,7 @@ function analyzeShooting({ frames }) {
     if (a != null && a < mK) { mK = a; loadIdx = i; }
   }
   const rel = frames[relIdx], load = frames[loadIdx], metrics = [];
-  if (isFinite(mK)) metrics.push(metric(lvlLow(mK, 142, 155), Math.round(mK) + '°', 'ひざのため',
+  if (isFinite(mK)) metrics.push(mtr('knee', mK, 'low', 142, 155, Math.round(mK) + '°', null, 'ひざのため',
     ['🦵', 'ひざが ぐっと まがってる！', 'ためが できてて パワーが でる'],
     ['🦵', 'ひざの ためが あさい', 'もっと 深く しずんでから とぼう（目安 140°台まで）']));
   // peak elbow extension across the shooting phase (a brief moment the coarse
@@ -174,20 +206,20 @@ function analyzeShooting({ frames }) {
     const a = angle(kp(frames[i], S('shoulder')), kp(frames[i], S('elbow')), kp(frames[i], S('wrist')));
     if (a != null && (elb == null || a > elb)) elb = a;
   }
-  if (elb != null) metrics.push(metric(lvlHigh(elb, 165, 150), Math.round(elb) + '°', 'うでの のび',
+  if (elb != null) metrics.push(mtr('elbow', elb, 'high', 165, 150, Math.round(elb) + '°', null, 'うでの のび',
     ['💪', 'うでが 完全に のびてる！', 'リリースが するどい'],
     ['💪', 'のびきりが あまい', 'ひじを 最後まで のばしきろう（目安 165°以上）']));
   const wr = kp(rel, S('wrist')), nose = kp(rel, 'nose') || kp(rel, S('shoulder'));
   if (wr && nose) {
     const tl = torsoLen(rel) || 1; const fhr = (nose.y - wr.y) / tl;
-    metrics.push(metric(lvlHigh(fhr, 0.18, 0.02), fhr >= 0.18 ? 'たかい' : fhr >= 0.02 ? 'ふつう' : 'ひくい', 'フォロースルー',
+    metrics.push(mtr('follow', fhr, 'high', 0.18, 0.02, null, ['ひくい', 'ふつう', 'たかい'], 'フォロースルー',
       ['🙌', 'てが あたまの うえまで のびてる！', 'きれいな フォロースルー'],
       ['🙌', 'フォロースルーが ひくい', 'なげた後、手を あたまより 高く のこそう']));
   }
   const la = kp(load, 'left_ankle'), ra = kp(load, 'right_ankle'), ls = kp(load, 'left_shoulder'), rs = kp(load, 'right_shoulder');
   if (la && ra && ls && rs) {
-    const ratio = dist(la, ra) / (dist(ls, rs) || 1); const lv = lvlBand(ratio, 0.85, 1.35, 0.65, 1.6);
-    metrics.push(metric(lv, lv === 2 ? 'バッチリ' : lv === 1 ? 'すこし' : 'なおそう', 'あしのはば',
+    const ratio = dist(la, ra) / (dist(ls, rs) || 1);
+    metrics.push(mtr('foot', ratio, 'band', [0.85, 1.35], [0.65, 1.6], null, ['なおそう', 'すこし', 'バッチリ'], 'あしのはば',
       ['🦶', 'あしの はばが 理想的！', 'どっしり 安定してる'],
       ['🦶', 'あしの はばが いまいち', 'かたはばに そろえよう（広すぎ・せますぎ 注意）']));
   }
@@ -201,7 +233,7 @@ function analyzeDribble({ frames }) {
   const metrics = [];
   // 1) low athletic stance (knee bend, averaged)
   const knees = series(frames, (f) => angle(kp(f, S('hip')), kp(f, S('knee')), kp(f, S('ankle'))));
-  if (knees.length) { const a = avg(knees); metrics.push(metric(lvlLow(a, 148, 160), Math.round(a) + '°', 'ひくいしせい',
+  if (knees.length) { const a = avg(knees); metrics.push(mtr('stance', a, 'low', 148, 160, Math.round(a) + '°', null, 'ひくいしせい',
     ['🔽', 'こしが しっかり ひくい！', 'これなら 簡単に とられない'],
     ['🔽', 'しせいが 高い', 'もっと こしを 落として（目安 平均145°台）']));
   }
@@ -209,14 +241,14 @@ function analyzeDribble({ frames }) {
   const leans = series(frames, (f) => { const t = torsoLen(f); if (!t) return null;
     const ls = kp(f, 'left_shoulder'), rs = kp(f, 'right_shoulder'), lh = kp(f, 'left_hip'), rh = kp(f, 'right_hip');
     if (!ls || !rs || !lh || !rh) return null; return Math.abs(mid(ls, rs).x - mid(lh, rh).x) / t; });
-  if (leans.length) { const lean = avg(leans); metrics.push(metric(lvlLow(lean, 0.30, 0.45), lean <= 0.30 ? 'まえむき' : lean <= 0.45 ? 'ややうつむき' : 'うつむき', 'あたまアップ',
+  if (leans.length) { const lean = avg(leans); metrics.push(mtr('headup', lean, 'low', 0.30, 0.45, null, ['うつむき', 'ややうつむき', 'まえむき'], 'あたまアップ',
     ['👀', 'しっかり 前を みれてる！', 'ボールを 見ないで つけてる'],
     ['👀', '前傾して ボールを 見がち', 'かおを 上げて 前を 見たまま つこう']));
   }
   // 3) rhythm — active hand moves up & down (normalized vertical motion)
   const t0 = avg(series(frames, torsoLen)) || 1;
   const wy = series(frames, (f) => kp(f, S('wrist'))?.y);
-  if (wy.length >= 4) { const amp = std(wy) / t0; metrics.push(metric(lvlHigh(amp, 0.13, 0.07), amp >= 0.13 ? 'するどい' : amp >= 0.07 ? 'ふつう' : 'よわい', 'リズム・強さ',
+  if (wy.length >= 4) { const amp = std(wy) / t0; metrics.push(mtr('rhythm', amp, 'high', 0.13, 0.07, null, ['よわい', 'ふつう', 'するどい'], 'リズム・強さ',
     ['🥁', 'つよく するどく つけてる！', 'ボールが 走ってる'],
     ['🥁', 'つきが よわい', 'ゆかへ もっと つよく・速く たたきつけよう']));
   }
@@ -230,21 +262,21 @@ function analyzeDefense({ frames }) {
   const metrics = [];
   // 1) low stance (most important for defense)
   const knees = series(frames, (f) => angle(kp(f, S('hip')), kp(f, S('knee')), kp(f, S('ankle'))));
-  if (knees.length) { const a = avg(knees); metrics.push(metric(lvlLow(a, 140, 153), Math.round(a) + '°', 'こしを おとす',
+  if (knees.length) { const a = avg(knees); metrics.push(mtr('stance', a, 'low', 140, 153, Math.round(a) + '°', null, 'こしを おとす',
     ['🔽', 'こしが かなり ひくい！ 良い構え', 'これなら 速く 反応できる'],
     ['🔽', '構えが 高い', 'もっと 腰を 落として（目安 平均140°前後）']));
   }
   // 2) wide base
   const widths = series(frames, (f) => { const la = kp(f, 'left_ankle'), ra = kp(f, 'right_ankle'), ls = kp(f, 'left_shoulder'), rs = kp(f, 'right_shoulder');
     if (!la || !ra || !ls || !rs) return null; return dist(la, ra) / (dist(ls, rs) || 1); });
-  if (widths.length) { const r = avg(widths); metrics.push(metric(lvlHigh(r, 1.25, 1.05), r >= 1.25 ? 'ひろい' : r >= 1.05 ? 'ふつう' : 'せまい', 'あしのはば',
+  if (widths.length) { const r = avg(widths); metrics.push(mtr('base', r, 'high', 1.25, 1.05, null, ['せまい', 'ふつう', 'ひろい'], 'あしのはば',
     ['🦶', 'スタンスが ひろくて 安定！', '左右に すばやく 動ける'],
     ['🦶', 'スタンスが せまい', '肩幅より はっきり 広く 構えよう']));
   }
   // 3) hands up / active
   const handsUp = frames.filter((f) => { const h = kp(f, S('hip')); const w = kp(f, S('wrist')); return h && w && w.y < h.y; }).length;
   const ratio = frames.length ? handsUp / frames.length : 0;
-  metrics.push(metric(lvlHigh(ratio, 0.6, 0.35), ratio >= 0.6 ? 'あげてる' : ratio >= 0.35 ? 'ときどき' : 'さげてる', 'てを あげる',
+  metrics.push(mtr('hands', ratio, 'high', 0.6, 0.35, null, ['さげてる', 'ときどき', 'あげてる'], 'てを あげる',
     ['🙌', 'ずっと 手を あげて 守れてる！', 'パスも シュートも 邪魔できる'],
     ['🙌', '手が 下がりがち', '両手を 上げ続けて コースを 消そう']));
   return { keyIdx, side, metrics };
@@ -315,13 +347,14 @@ function fbCard(kind, [ico, title, sub]) {
   return d;
 }
 function showResult(mode, res, data) {
+  gradeAll(mode, res.metrics); // ensure levels set (idempotent)
   const lvl = (m) => (m.level == null ? (m.good ? 2 : 0) : m.level); // tolerate old shape
   const sorted = res.metrics.slice().sort((a, b) => lvl(a) - lvl(b)); // worst first
   const good = res.metrics.filter((m) => lvl(m) === 2).length; // only ◎ counts
   // demanding scoring: need ALL ◎ for 3 stars
   const total = res.metrics.length;
   const stars = good >= total ? 3 : good >= Math.ceil(total / 2) ? 2 : 1;
-  $('modeTag').textContent = MODE_LABEL[mode];
+  $('modeTag').textContent = MODE_LABEL[mode] + (loadModel()[mode] ? ' ・ お手本基準' : ' ・ 標準基準');
   $('scoreStars').textContent = '⭐'.repeat(stars);
   const best = res.metrics.filter((m) => lvl(m) === 2)[0];
   const worst = sorted[0];
@@ -416,6 +449,7 @@ async function handleFile(file) {
     const data = await analyzeFile(file);
     const res = ANALYZERS[currentMode](data);
     if (!res.metrics.length) { URL.revokeObjectURL(data.url); throw new Error('no-pose'); }
+    gradeAll(currentMode, res.metrics); // grade vs お手本 if set, else default bars
     currentUrl = data.url; // kept alive for result playback; revoked on leave
     showResult(currentMode, res, data);
   } catch (e) {
@@ -719,5 +753,47 @@ $('recBack').addEventListener('click', () => {
 });
 $('clipsBack').addEventListener('click', () => showScreen('1on1'));
 
+// ---- お手本 (coach reference) registration ----
+let pendingModelMode = null;
+const MODEL_MODES = [['shoot', '🎯 シュート'], ['dribble', '⛹️ ドリブル'], ['defense', '🛡️ ディフェンス']];
+function renderModelScreen() {
+  const ref = loadModel(); const list = $('modelList'); list.innerHTML = '';
+  MODEL_MODES.forEach(([mode, label]) => {
+    const has = !!ref[mode];
+    const badge = has
+      ? '<span style="font-size:12px;font-weight:700;color:#3fe0a2;background:rgba(63,224,162,.12);border-radius:999px;padding:3px 10px">お手本 登録済み ✓</span>'
+      : '<span style="font-size:12px;font-weight:700;color:#9fb2cc;background:#1a2233;border-radius:999px;padding:3px 10px">標準基準</span>';
+    const vals = has ? `<div class="note" style="margin-top:8px">きじゅん値：${Object.entries(ref[mode]).map(([k, v]) => k + ' ' + (Math.round(v * 100) / 100)).join(' / ')}</div>` : '';
+    const row = document.createElement('div'); row.className = 'card';
+    row.innerHTML = `<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><b style="font-size:16px">${label}</b>${badge}`
+      + `<span style="margin-left:auto"></span><button class="btn btn-ok" data-reg="${mode}">📹 お手本を登録</button>`
+      + (has ? `<button class="btn btn-edit" data-clr="${mode}">標準にもどす</button>` : '') + `</div>${vals}`;
+    list.appendChild(row);
+  });
+  list.querySelectorAll('[data-reg]').forEach((b) => b.onclick = () => { pendingModelMode = b.dataset.reg; $('modelInput').value = ''; $('modelInput').click(); });
+  list.querySelectorAll('[data-clr]').forEach((b) => b.onclick = () => { clearModel(b.dataset.clr); renderModelScreen(); });
+}
+async function handleModelFile(file) {
+  if (!file || !pendingModelMode) return;
+  const mode = pendingModelMode;
+  showScreen('loading'); $('progressBar').style.width = '0%'; $('loadingMsg').textContent = 'お手本を 解析中…';
+  try {
+    await getDetector();
+    const data = await analyzeFile(file);
+    const res = ANALYZERS[mode](data); URL.revokeObjectURL(data.url);
+    if (!res.metrics.length) throw new Error('no-pose');
+    saveModel(mode, modelVals(res.metrics));
+    renderModelScreen(); showScreen('model');
+  } catch (e) {
+    $('errorMsg').textContent = e.message === 'no-pose'
+      ? 'お手本の からだが よく うつってませんでした。よこ から、ぜんしんが うつるように とってね。'
+      : 'うまく いかなかったよ。べつの どうがで ためしてね。';
+    showScreen('error');
+  }
+}
+$('modelBtn').addEventListener('click', () => { renderModelScreen(); showScreen('model'); });
+$('modelBackBtn').addEventListener('click', () => showScreen('home'));
+$('modelInput').addEventListener('change', (e) => handleModelFile(e.target.files[0]));
+
 // expose a couple of helpers for quick verification in the preview
-window.__hoop = { saveSession, loadLog, showHistory, analyzeDribble, analyzeDefense, analyzeFile, analyzeShooting, ANALYZERS, getDetector, loadRoster, renderRoster, openPlayer, suggestMenu, buildOneon };
+window.__hoop = { saveSession, loadLog, showHistory, analyzeDribble, analyzeDefense, analyzeFile, analyzeShooting, ANALYZERS, getDetector, loadRoster, renderRoster, openPlayer, suggestMenu, buildOneon, gradeAll, loadModel, saveModel, clearModel, modelVals };

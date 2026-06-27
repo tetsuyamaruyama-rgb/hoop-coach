@@ -10,7 +10,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="バスケコーチ" />
   <link rel="apple-touch-icon" href="icons/icon-180.png" />
-  <link rel="stylesheet" href="styles.css?v=12" />
+  <link rel="stylesheet" href="styles.css?v=13" />
 </head>
 <body>
   <div id="app">
@@ -45,6 +45,7 @@
       </button>
       <input id="videoInput" type="file" accept="video/*" hidden />
       <button class="link-btn" id="historyBtn">📒 れんしゅうの きろくを みる</button>
+      <button class="link-btn" id="modelBtn">⚙️ お手本（基準）を 設定</button>
     </section>
 
     <!-- LOADING -->
@@ -132,6 +133,15 @@
       <button class="big-btn secondary" id="oneonAgain">⬅️ もどる</button>
     </section>
 
+    <!-- お手本 (coach reference) -->
+    <section id="screen-model" class="screen">
+      <h2 class="h2">⚙️ お手本（基準）</h2>
+      <p class="note" style="margin:0 0 12px">良いフォームの 見本を 登録すると、その お手本との 近さで 採点します。<br>基準を 決めるのは コーチです。登録しなければ 標準基準で 採点します。</p>
+      <input id="modelInput" type="file" accept="video/*" hidden />
+      <div id="modelList"></div>
+      <button class="big-btn secondary" id="modelBackBtn">⬅️ もどる</button>
+    </section>
+
     <!-- ROSTER (team) -->
     <section id="screen-roster" class="screen">
       <h2 class="h2">👥 チーム（サンプル）</h2>
@@ -158,6 +168,6 @@
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-converter@4.20.0/dist/tf-converter.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-webgl@4.20.0/dist/tf-backend-webgl.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection@2.1.3/dist/pose-detection.min.js"></script>
-  <script src="app.js?v=12"></script>
+  <script src="app.js?v=13"></script>
 </body>
 </html>

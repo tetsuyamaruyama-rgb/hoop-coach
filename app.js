@@ -166,22 +166,30 @@ function gradeVsModel(m, target) { // how close to the お手本's measured valu
 // ---- お手本 (coach reference) storage: measured target values per skill, on-device ----
 const MODEL_KEY = 'hoopModel_v1';
 function loadModel() { try { return JSON.parse(localStorage.getItem(MODEL_KEY)) || {}; } catch (e) { return {}; } }
-function saveModel(mode, vals) { const m = loadModel(); m[mode] = vals; try { localStorage.setItem(MODEL_KEY, JSON.stringify(m)); } catch (e) {} }
+function modelOf(mode) { const r = loadModel()[mode]; if (!r) return null; return r.vals ? r : { vals: r, src: '' }; } // tolerate old shape
+function saveModel(mode, vals, src) { const m = loadModel(); m[mode] = { vals, src: src || '参考動画' }; try { localStorage.setItem(MODEL_KEY, JSON.stringify(m)); } catch (e) {} }
 function clearModel(mode) { const m = loadModel(); delete m[mode]; try { localStorage.setItem(MODEL_KEY, JSON.stringify(m)); } catch (e) {} }
 function modelVals(metrics) { const o = {}; metrics.forEach((x) => { if (x.raw != null) o[x.key] = x.raw; }); return o; }
 function gradeAll(mode, metrics, angle) {
-  const ref = loadModel()[mode];
+  const ref = modelOf(mode);
   metrics.forEach((m) => {
     if (m.level != null || m.skip) return; // already graded / skipped
     if (angle && ANGLE_OK[m.key] && ANGLE_OK[m.key] !== 'both' && ANGLE_OK[m.key] !== angle) {
       m.skip = true; m.value = '—'; return; // this angle can't measure it
     }
-    const L = (ref && ref[m.key] != null) ? gradeVsModel(m, ref[m.key]) : gradeDefault(m);
+    const L = (ref && ref.vals[m.key] != null) ? gradeVsModel(m, ref.vals[m.key]) : gradeDefault(m);
     m.level = L; m.good = L === 2;
     m.value = (m.valNum != null) ? m.valNum : (m.valWords ? m.valWords[L] : '');
   });
   return metrics;
 }
+// ---- coach roster (who sets the お手本) ----
+const COACH_KEY = 'hoopCoaches_v1';
+function loadCoaches() {
+  try { const c = JSON.parse(localStorage.getItem(COACH_KEY)); if (c && c.length) return c; } catch (e) {}
+  const s = [{ id: 'c1', name: 'コーチA', role: 'ヘッドコーチ' }]; try { localStorage.setItem(COACH_KEY, JSON.stringify(s)); } catch (e) {} return s;
+}
+function saveCoaches(list) { try { localStorage.setItem(COACH_KEY, JSON.stringify(list)); } catch (e) {} }
 
 // ---- analyzers: each returns {keyIdx, side, metrics:[{level,value,label,praise,tip}]} ----
 function analyzeShooting({ frames }) {
@@ -375,7 +383,8 @@ function showResult(mode, res, data) {
   const total = graded.length;
   const stars = total === 0 ? 1 : good >= total ? 3 : good >= Math.ceil(total / 2) ? 2 : 1;
   const angleTxt = currentAngle === 'front' ? '正面' : '横';
-  $('modeTag').textContent = MODE_LABEL[mode] + ' ・ ' + angleTxt + (loadModel()[mode] ? ' ・ お手本基準' : '');
+  const mref = modelOf(mode);
+  $('modeTag').textContent = MODE_LABEL[mode] + ' ・ ' + angleTxt + (mref ? ' ・ ' + (mref.src ? mref.src + '基準' : 'お手本基準') : '');
   $('scoreStars').textContent = '⭐'.repeat(stars);
   const best = graded.filter((m) => lvl(m) === 2)[0];
   const worst = sorted[0];
@@ -816,21 +825,37 @@ const MODEL_MODES = [['shoot', '🎯 シュート'],
   ['dribble_back', '⛹️ ：バックチェンジ'], ['dribble_legthru', '⛹️ ：レッグスルー'],
   ['defense', '🛡️ ディフェンス']];
 function renderModelScreen() {
-  const ref = loadModel(); const list = $('modelList'); list.innerHTML = '';
+  const list = $('modelList'); list.innerHTML = '';
   MODEL_MODES.forEach(([mode, label]) => {
-    const has = !!ref[mode];
+    const ref = modelOf(mode); const has = !!ref;
     const badge = has
-      ? '<span style="font-size:12px;font-weight:700;color:#3fe0a2;background:rgba(63,224,162,.12);border-radius:999px;padding:3px 10px">お手本 登録済み ✓</span>'
+      ? `<span style="font-size:12px;font-weight:700;color:#3fe0a2;background:rgba(63,224,162,.12);border-radius:999px;padding:3px 10px">お手本 ✓ ${ref.src || ''}</span>`
       : '<span style="font-size:12px;font-weight:700;color:#9fb2cc;background:#1a2233;border-radius:999px;padding:3px 10px">標準基準</span>';
-    const vals = has ? `<div class="note" style="margin-top:8px">きじゅん値：${Object.entries(ref[mode]).map(([k, v]) => k + ' ' + (Math.round(v * 100) / 100)).join(' / ')}</div>` : '';
+    const vals = has ? `<div class="note" style="margin-top:8px">きじゅん値：${Object.entries(ref.vals).map(([k, v]) => k + ' ' + (Math.round(v * 100) / 100)).join(' / ')}</div>` : '';
     const row = document.createElement('div'); row.className = 'card';
     row.innerHTML = `<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><b style="font-size:16px">${label}</b>${badge}`
       + `<span style="margin-left:auto"></span><button class="btn btn-ok" data-reg="${mode}">📹 お手本を登録</button>`
       + (has ? `<button class="btn btn-edit" data-clr="${mode}">標準にもどす</button>` : '') + `</div>${vals}`;
     list.appendChild(row);
   });
-  list.querySelectorAll('[data-reg]').forEach((b) => b.onclick = () => { pendingModelMode = b.dataset.reg; $('modelInput').value = ''; $('modelInput').click(); });
+  list.querySelectorAll('[data-reg]').forEach((b) => b.onclick = () => { pendingModelMode = b.dataset.reg; renderModelSrc(); showScreen('modelsrc'); });
   list.querySelectorAll('[data-clr]').forEach((b) => b.onclick = () => { clearModel(b.dataset.clr); renderModelScreen(); });
+}
+// pick whose お手本 it is (a registered coach, or an external reference video)
+let pendingModelSrc = '';
+function renderModelSrc() {
+  $('modelsrcMode').textContent = (MODE_LABEL[pendingModelMode] || pendingModelMode) + ' の お手本は だれの？';
+  const list = $('modelsrcList'); list.innerHTML = '';
+  loadCoaches().forEach((c) => {
+    const b = document.createElement('button'); b.className = 'player-row';
+    b.innerHTML = `<span class="pr-ava">🧑‍🏫</span><span class="pr-body"><b>${c.name}</b><span>${c.role || 'コーチ'}</span></span>`;
+    b.onclick = () => { pendingModelSrc = c.name; $('modelInput').value = ''; $('modelInput').click(); };
+    list.appendChild(b);
+  });
+  const ext = document.createElement('button'); ext.className = 'player-row';
+  ext.innerHTML = `<span class="pr-ava">🎬</span><span class="pr-body"><b>参考動画（外部）</b><span>プロや 見本の 動画を お手本にする</span></span>`;
+  ext.onclick = () => { pendingModelSrc = '参考動画'; $('modelInput').value = ''; $('modelInput').click(); };
+  list.appendChild(ext);
 }
 async function handleModelFile(file) {
   if (!file || !pendingModelMode) return;
@@ -841,7 +866,7 @@ async function handleModelFile(file) {
     const data = await analyzeFile(file);
     const res = ANALYZERS[baseOf(mode)](data); URL.revokeObjectURL(data.url);
     if (!res.metrics.length) throw new Error('no-pose');
-    saveModel(mode, modelVals(res.metrics));
+    saveModel(mode, modelVals(res.metrics), pendingModelSrc);
     renderModelScreen(); showScreen('model');
   } catch (e) {
     $('errorMsg').textContent = e.message === 'no-pose'
@@ -852,7 +877,26 @@ async function handleModelFile(file) {
 }
 $('modelBtn').addEventListener('click', () => { renderModelScreen(); showScreen('model'); });
 $('modelBackBtn').addEventListener('click', () => showScreen('home'));
+$('modelsrcBack').addEventListener('click', () => showScreen('model'));
 $('modelInput').addEventListener('change', (e) => handleModelFile(e.target.files[0]));
 
+// ---- coach roster ----
+function renderCoaches() {
+  const list = $('coachList'); list.innerHTML = '';
+  loadCoaches().forEach((c) => {
+    const row = document.createElement('div'); row.className = 'player-row';
+    row.innerHTML = `<span class="pr-ava">🧑‍🏫</span><span class="pr-body"><b>${c.name}</b><span>${c.role || 'コーチ'}</span></span>`
+      + `<button class="btn btn-edit" style="padding:6px 12px">✕</button>`;
+    row.querySelector('button').onclick = () => { saveCoaches(loadCoaches().filter((x) => x.id !== c.id)); renderCoaches(); };
+    list.appendChild(row);
+  });
+}
+$('coachBtn').addEventListener('click', () => { renderCoaches(); showScreen('coaches'); });
+$('coachBack').addEventListener('click', () => showScreen('home'));
+$('coachAdd').addEventListener('click', () => {
+  const name = (prompt('コーチの 名前は？') || '').trim(); if (!name) return;
+  const list = loadCoaches(); list.push({ id: 'c' + Date.now(), name, role: 'コーチ' }); saveCoaches(list); renderCoaches();
+});
+
 // expose a couple of helpers for quick verification in the preview
-window.__hoop = { saveSession, loadLog, showHistory, analyzeDribble, analyzeDefense, analyzeFile, analyzeShooting, ANALYZERS, getDetector, loadRoster, renderRoster, openPlayer, suggestMenu, buildOneon, gradeAll, loadModel, saveModel, clearModel, modelVals };
+window.__hoop = { saveSession, loadLog, showHistory, analyzeDribble, analyzeDefense, analyzeFile, analyzeShooting, ANALYZERS, getDetector, loadRoster, renderRoster, openPlayer, suggestMenu, buildOneon, gradeAll, loadModel, modelOf, saveModel, clearModel, modelVals, loadCoaches, saveCoaches, renderCoaches, renderModelSrc };

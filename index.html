@@ -10,7 +10,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="バスケコーチ" />
   <link rel="apple-touch-icon" href="icons/icon-180.png" />
-  <link rel="stylesheet" href="styles.css?v=16" />
+  <link rel="stylesheet" href="styles.css?v=17" />
 </head>
 <body>
   <div id="app">
@@ -45,6 +45,7 @@
       </button>
       <input id="videoInput" type="file" accept="video/*" hidden />
       <button class="link-btn" id="historyBtn">📒 れんしゅうの きろくを みる</button>
+      <button class="link-btn" id="coachBtn">🧑‍🏫 コーチを 登録</button>
       <button class="link-btn" id="modelBtn">⚙️ お手本（基準）を 設定</button>
     </section>
 
@@ -162,6 +163,23 @@
       <button class="big-btn secondary" id="modelBackBtn">⬅️ もどる</button>
     </section>
 
+    <!-- coaches -->
+    <section id="screen-coaches" class="screen">
+      <h2 class="h2">🧑‍🏫 コーチ</h2>
+      <p class="note" style="margin:0 0 12px">コーチを 登録すると、お手本（基準）を そのコーチの名前で 登録できます。</p>
+      <div id="coachList"></div>
+      <button class="big-btn" id="coachAdd">➕ コーチを 追加</button>
+      <button class="big-btn secondary" id="coachBack">⬅️ もどる</button>
+    </section>
+
+    <!-- お手本 source pick -->
+    <section id="screen-modelsrc" class="screen">
+      <h2 class="h2">📹 お手本の もとは？</h2>
+      <p class="note" id="modelsrcMode" style="margin:0 0 12px"></p>
+      <div id="modelsrcList"></div>
+      <button class="big-btn secondary" id="modelsrcBack">⬅️ もどる</button>
+    </section>
+
     <!-- ROSTER (team) -->
     <section id="screen-roster" class="screen">
       <h2 class="h2">👥 チーム（サンプル）</h2>
@@ -188,6 +206,6 @@
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-converter@4.20.0/dist/tf-converter.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-webgl@4.20.0/dist/tf-backend-webgl.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection@2.1.3/dist/pose-detection.min.js"></script>
-  <script src="app.js?v=16"></script>
+  <script src="app.js?v=17"></script>
 </body>
 </html>

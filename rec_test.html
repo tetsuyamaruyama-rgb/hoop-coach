@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<meta name="robots" content="noindex" />
+<title>録画テスト（iOS実機検証）</title>
+<style>
+  :root{--bg:#0e1320;--card:#151c2b;--card2:#1a2233;--line:#26314a;--ink:#eef2f7;--muted:#9fb2cc;
+    --orange:#ff8a2b;--good:#3fe0a2;--warn:#f6b24a;--red:#ff6b6b;--blue:#5ab0ff}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font-family:-apple-system,"Hiragino Sans",sans-serif;padding:16px;line-height:1.7}
+  .wrap{max-width:520px;margin:0 auto}
+  h1{font-size:20px;margin:4px 0 6px}
+  p.lead{color:var(--muted);font-size:14px;margin:0 0 14px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;margin-bottom:12px}
+  video.prev{width:100%;border-radius:12px;background:#000;display:block}
+  .roles{display:flex;gap:10px;margin:12px 0}
+  .role{flex:1;text-align:center;border-radius:10px;padding:8px;border:1px solid var(--line)}
+  .role .l{font-size:11px;color:var(--muted)}
+  .role .v{font-size:20px;font-weight:800}
+  .role.off{border-color:var(--orange)}.role.off .v{color:var(--orange)}
+  .role.def{border-color:var(--good)}.role.def .v{color:var(--good)}
+  button{font-size:16px;font-weight:800;border:none;border-radius:12px;padding:14px;width:100%;
+    margin-top:8px;cursor:pointer;color:#0e1320}
+  .b-start{background:var(--orange)}.b-switch{background:var(--blue)}.b-stop{background:var(--red)}
+  button:disabled{opacity:.4}
+  .status{font-size:13px;color:var(--muted);margin:8px 0;min-height:20px}
+  .clip{display:flex;gap:10px;align-items:center;border-top:1px solid var(--line);padding:10px 0}
+  .clip:first-of-type{border-top:none}
+  .clip video{width:96px;height:56px;border-radius:8px;background:#000;flex:none;object-fit:cover}
+  .clip .meta b{display:block;font-size:14px}
+  .clip .meta span{font-size:12px;color:var(--muted)}
+  .diag{font-size:12px;color:var(--muted);white-space:pre-wrap;background:var(--card2);
+    border-radius:10px;padding:10px;margin-top:6px}
+  .ok{color:var(--good)}.bad{color:var(--red)}
+  .h{font-weight:800;font-size:14px;margin-bottom:6px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>🎥 録画テスト（iOS実機検証）</h1>
+  <p class="lead">「連続録画＋ワンタップ攻守交替」が iPhone で動くかの検証用です。アプリ本体とは別物。</p>
+
+  <div class="card">
+    <video id="prev" class="prev" playsinline webkit-playsinline muted autoplay></video>
+    <div class="roles">
+      <div class="role off"><div class="l">オフェンス（攻め）</div><div class="v" id="offV">A</div></div>
+      <div class="role def"><div class="l">ディフェンス（守り）</div><div class="v" id="defV">B</div></div>
+    </div>
+    <button class="b-start" id="btnCam">① カメラを ひらく</button>
+    <button class="b-start" id="btnStart" disabled>② 録画スタート</button>
+    <button class="b-switch" id="btnSwitch" disabled>🔄 攻守交替（この攻撃を保存）</button>
+    <button class="b-stop" id="btnStop" disabled>■ 終了（最後を保存）</button>
+    <div class="status" id="status">カメラは まだ ひらいていません。</div>
+  </div>
+
+  <div class="card">
+    <div class="h">保存されたクリップ（攻守が交互になればOK）</div>
+    <div id="clips"><div style="color:var(--muted);font-size:13px">まだ ありません。</div></div>
+  </div>
+
+  <div class="card">
+    <div class="h">診断（このテキストを送ってください）</div>
+    <div class="diag" id="diag">起動待ち…</div>
+  </div>
+</div>
+
+<script>
+(function(){
+  var prev=document.getElementById('prev'), status=document.getElementById('status'),
+      clipsEl=document.getElementById('clips'), diag=document.getElementById('diag'),
+      offV=document.getElementById('offV'), defV=document.getElementById('defV'),
+      btnCam=document.getElementById('btnCam'), btnStart=document.getElementById('btnStart'),
+      btnSwitch=document.getElementById('btnSwitch'), btnStop=document.getElementById('btnStop');
+  var stream=null, recorder=null, chunks=[], mime='', roles={off:'A',def:'B'}, segRoles=null,
+      segStart=0, ending=false, clips=[], n=0;
+
+  function log(){ var L=[];
+    L.push('UA: '+navigator.userAgent);
+    L.push('MediaRecorder: '+(typeof MediaRecorder!=='undefined'?'あり':'なし❌'));
+    L.push('getUserMedia: '+(navigator.mediaDevices&&navigator.mediaDevices.getUserMedia?'あり':'なし❌'));
+    L.push('選んだ形式(mime): '+(mime||'(未定)'));
+    if(stream){var t=stream.getVideoTracks()[0]; var s=t?t.getSettings():{}; L.push('解像度: '+(s.width||'?')+'x'+(s.height||'?')+' / '+(s.frameRate?Math.round(s.frameRate)+'fps':'?'));}
+    L.push('保存クリップ数: '+clips.length);
+    diag.textContent=L.join('\n');
+  }
+  function pickMime(){ var c=['video/mp4','video/mp4;codecs=h264','video/webm;codecs=vp9','video/webm;codecs=vp8','video/webm'];
+    for(var i=0;i<c.length;i++){ try{ if(window.MediaRecorder&&MediaRecorder.isTypeSupported(c[i])) return c[i]; }catch(e){} } return ''; }
+  function setRoles(){ offV.textContent=roles.off; defV.textContent=roles.def; }
+  function swap(){ var o=roles.off; roles.off=roles.def; roles.def=o; setRoles(); }
+
+  btnCam.onclick=async function(){
+    status.textContent='カメラを ひらいています…';
+    try{
+      try{ stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'},audio:false}); }
+      catch(e){ stream=await navigator.mediaDevices.getUserMedia({video:true,audio:false}); }
+      prev.srcObject=stream; await prev.play().catch(function(){});
+      mime=pickMime();
+      btnCam.disabled=true; btnStart.disabled=false;
+      status.textContent='カメラOK。役割を確認して「録画スタート」。';
+    }catch(e){ status.innerHTML='<span class="bad">カメラを ひらけませんでした：'+e.name+'</span>'; }
+    log();
+  };
+
+  function startSeg(){
+    chunks=[]; segRoles={off:roles.off,def:roles.def}; segStart=Date.now();
+    try{ recorder = mime? new MediaRecorder(stream,{mimeType:mime}) : new MediaRecorder(stream); }
+    catch(e){ status.innerHTML='<span class="bad">録画を 開始できません：'+e.message+'</span>'; return; }
+    recorder.ondataavailable=function(e){ if(e.data&&e.data.size) chunks.push(e.data); };
+    recorder.onstop=onSegStop;
+    recorder.onerror=function(e){ status.innerHTML='<span class="bad">録画エラー：'+(e.error&&e.error.name)+'</span>'; };
+    recorder.start();
+  }
+  function onSegStop(){
+    var blob=new Blob(chunks,{type:(chunks[0]&&chunks[0].type)||mime||'video/mp4'});
+    var dur=Math.max(0,(Date.now()-segStart)/1000);
+    n++; clips.push({n:n,roles:segRoles,dur:dur,url:URL.createObjectURL(blob),size:blob.size});
+    renderClips(); log();
+    if(!ending) startSeg();
+  }
+  function renderClips(){
+    if(!clips.length){ clipsEl.innerHTML='<div style="color:var(--muted);font-size:13px">まだ ありません。</div>'; return; }
+    clipsEl.innerHTML=clips.map(function(c){
+      return '<div class="clip"><video src="'+c.url+'" playsinline muted controls></video>'
+        +'<div class="meta"><b>クリップ'+c.n+'</b><span>攻 '+c.roles.off+' / 守 '+c.roles.def
+        +' ・ 約'+c.dur.toFixed(1)+'秒 ・ '+Math.round(c.size/1024)+'KB</span></div></div>';
+    }).join('');
+  }
+
+  btnStart.onclick=function(){
+    if(!stream) return; ending=false;
+    startSeg();
+    btnStart.disabled=true; btnSwitch.disabled=false; btnStop.disabled=false;
+    status.innerHTML='<span class="ok">録画中…</span> 攻撃が終わったら「攻守交替」。';
+  };
+  btnSwitch.onclick=function(){
+    if(!recorder||recorder.state==='inactive') return;
+    ending=false; swap();                 // next segment uses swapped roles
+    recorder.stop();                      // saves current segment with its own (pre-swap) roles, then auto-restarts
+    status.innerHTML='<span class="ok">録画中…</span> 攻守交替しました。次の攻撃へ。';
+  };
+  btnStop.onclick=function(){
+    if(!recorder||recorder.state==='inactive') return;
+    ending=true; recorder.stop();
+    btnSwitch.disabled=true; btnStop.disabled=true; btnStart.disabled=false;
+    status.textContent='終了しました。クリップを確認してください。もう一度「録画スタート」も可。';
+  };
+
+  log();
+})();
+</script>
+</body>
+</html>

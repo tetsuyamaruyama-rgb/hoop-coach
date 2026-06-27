@@ -511,5 +511,72 @@ $('rosterBtn').addEventListener('click', () => { renderRoster(); showScreen('ros
 $('rosterBackBtn').addEventListener('click', () => showScreen('home'));
 $('playerBackBtn').addEventListener('click', () => { renderRoster(); showScreen('roster'); });
 
+// ---- 1on1 record + review (MAIN entry; sample/demo output) ----
+const OFF_GOOD = {
+  speed: ['⚡', 'スピードで 抜き去れている', '一歩目の速さが 武器'],
+  power: ['💪', '体の強さで 押し込めている', 'コンタクトに 強い'],
+  dribble: ['🏀', 'ドリブルで かわせている', 'ハンドリングが 効いてる'],
+  shoot: ['🎯', 'シュートまで 持ち込めている', '得点力がある'],
+  defense: ['🧠', '落ち着いて 攻められている', '焦らない'],
+  quick: ['💨', '第一歩で 出し抜けている', '反応が速い'],
+};
+const OFF_TIP = {
+  shoot: ['🎯', 'フィニッシュ（シュート）の精度を上げよう', '最後の一本を 落ち着いて'],
+  dribble: ['🏀', '仕掛ける回数を 増やそう', '低く速いドリブルで'],
+  power: ['💪', 'コンタクトに 負けないように', '体の使い方を意識'],
+  quick: ['💨', '切り返しを もっと鋭く', ''],
+};
+const DEF_GOOD = {
+  defense: ['🛡️', '構えが よく止まれている', '低い姿勢を 保てている'],
+  power: ['💪', '体を張って 守れている', '当たりに 強い'],
+  quick: ['💨', '反応が 速い', '抜かれにくい'],
+  speed: ['⚡', '戻り・寄せが 速い', ''],
+  dribble: ['👀', 'よく ボールを 見れている', ''],
+  shoot: ['🧱', 'プレッシャーを かけられている', ''],
+};
+const DEF_TIP = {
+  quick: ['💨', '抜かれ際の 反応を 速く', '一歩目に ついていこう'],
+  defense: ['🔽', 'もっと 腰を 低く', 'スタンスを 広く'],
+  speed: ['⚡', 'スライドの 足を 速く', ''],
+  power: ['💪', '当たり負けに 注意', ''],
+};
+function fbHTML(kind, a) { return `<div class="fb ${kind}"><div class="ico">${a[0]}</div><div class="txt"><b>${a[1]}</b><span>${a[2] || ''}</span></div></div>`; }
+const strongestK = (s) => PARAMS.slice().sort((a, b) => s[b.k] - s[a.k])[0].k;
+const weakestAmong = (s, keys) => keys.slice().sort((a, b) => s[a] - s[b])[0];
+function fillPlayerSelect(sel, selId) {
+  sel.innerHTML = loadRoster().map((p) => `<option value="${p.id}">${p.name}（#${p.num}・${p.pos}）</option>`).join('');
+  if (selId) sel.value = selId;
+}
+function buildOneon(offId, defId) {
+  const r = loadRoster(); const off = r.find((p) => p.id === offId) || r[0]; const def = r.find((p) => p.id === defId) || r[1];
+  const offGood = OFF_GOOD[strongestK(off.stats)] || OFF_GOOD.speed;
+  const offTip = OFF_TIP[weakestAmong(off.stats, ['shoot', 'dribble', 'power', 'quick'])] || OFF_TIP.shoot;
+  const defGood = DEF_GOOD[strongestK(def.stats)] || DEF_GOOD.defense;
+  const defTip = DEF_TIP[weakestAmong(def.stats, ['quick', 'defense', 'speed', 'power'])] || DEF_TIP.quick;
+  $('oneonResult').innerHTML =
+    `<div class="vs-tag">🆚 1on1 レビュー（サンプル）</div>`
+    + `<div style="font-weight:800;font-size:17px;margin-bottom:12px">${off.name} <span style="color:var(--muted);font-weight:400">vs</span> ${def.name}</div>`
+    + `<div class="card"><div class="role-ttl"><span class="dot" style="background:#ff8a2b"></span>オフェンス：${off.name}</div>`
+    + fbHTML('good', offGood) + fbHTML('tip', offTip)
+    + `<div class="pos">📍 ポジショニング：ゴールへの 最短ラインを 取れています。</div></div>`
+    + `<div class="card"><div class="role-ttl"><span class="dot" style="background:#3fe0a2"></span>ディフェンス：${def.name}</div>`
+    + fbHTML('good', defGood) + fbHTML('tip', defTip)
+    + `<div class="pos">📍 ポジショニング：相手とゴールの 間を キープできています。</div></div>`
+    + `<p class="note" style="text-align:center">✓ 結果は 各選手のカードに 反映されます（サンプル）。<br>実解析（複数人・攻守 両者の自動評価）は 開発中です。</p>`;
+}
+function runOneon() {
+  showScreen('loading'); $('progressBar').style.width = '0%'; $('loadingMsg').textContent = 'AIが 1on1を 解析中…（サンプル）';
+  let pct = 0; const off = $('offSel').value, def = $('defSel').value;
+  const iv = setInterval(() => {
+    pct = Math.min(100, pct + 12); $('progressBar').style.width = pct + '%';
+    if (pct >= 100) { clearInterval(iv); buildOneon(off, def); showScreen('1on1-result'); }
+  }, 140);
+}
+$('oneonBtn').addEventListener('click', () => { fillPlayerSelect($('offSel'), 'a'); fillPlayerSelect($('defSel'), 'b'); showScreen('1on1'); });
+$('oneonBack').addEventListener('click', () => showScreen('home'));
+$('oneonPick').addEventListener('click', () => { $('oneonInput').value = ''; $('oneonInput').click(); });
+$('oneonInput').addEventListener('change', (e) => { if (e.target.files[0]) runOneon(); });
+$('oneonAgain').addEventListener('click', () => showScreen('home'));
+
 // expose a couple of helpers for quick verification in the preview
-window.__hoop = { saveSession, loadLog, showHistory, analyzeDribble, analyzeDefense, analyzeFile, analyzeShooting, ANALYZERS, getDetector, loadRoster, renderRoster, openPlayer, suggestMenu };
+window.__hoop = { saveSession, loadLog, showHistory, analyzeDribble, analyzeDefense, analyzeFile, analyzeShooting, ANALYZERS, getDetector, loadRoster, renderRoster, openPlayer, suggestMenu, buildOneon };

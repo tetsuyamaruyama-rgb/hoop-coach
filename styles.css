@@ -140,3 +140,15 @@ header h1 span{color:var(--orange)}
 .btn{font-size:14px;font-weight:700;border-radius:10px;padding:8px 16px;border:none;cursor:pointer}
 .btn-edit{background:transparent;border:1px solid var(--warn);color:var(--warn)}
 .btn-ok{background:var(--good);color:#06281b}
+
+/* 1on1 */
+.hero1on1{box-shadow:0 12px 32px rgba(255,122,24,.34)}
+.section-label{font-size:12px;font-weight:700;color:var(--dim);letter-spacing:1px;margin:20px 4px 10px}
+.pick-label{display:block;font-size:13px;color:var(--muted);font-weight:700;margin:0 0 4px}
+.pick{width:100%;padding:12px;border-radius:12px;border:1px solid var(--line);
+  background:var(--card2);color:var(--ink);font-size:16px;font-weight:700}
+.vs-tag{display:inline-block;background:rgba(255,138,43,.15);color:var(--orange-l);font-weight:800;
+  border-radius:999px;padding:3px 14px;font-size:13px;margin-bottom:8px}
+.role-ttl{font-weight:800;font-size:15px;margin:0 0 8px;display:flex;align-items:center;gap:8px}
+.role-ttl .dot{width:11px;height:11px;border-radius:50%;flex:none}
+.pos{font-size:13px;color:var(--muted);margin-top:8px;padding-top:8px;border-top:1px dashed var(--line)}

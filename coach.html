@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="robots" content="noindex, nofollow" />
+<title>バスケ 1on1 育成ツール（仮）｜コーチ・保護者向けご説明（サンプル）</title>
+<style>
+  :root{
+    --ink:#1f2933; --muted:#6b7280; --line:#e7e2da; --bg:#fbf8f4; --card:#fff;
+    --orange:#e85d04; --orange-l:#ff7a18; --green:#1f9d63; --green-bg:#e7f6ee;
+    --blue:#1769d6; --blue-bg:#e9f1fc; --amber:#b9770f;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font-family:-apple-system,"Hiragino Sans","Yu Gothic UI",sans-serif;line-height:1.75}
+  .wrap{max-width:780px;margin:0 auto;padding:24px 18px 60px}
+  .tag{display:inline-block;font-size:12px;font-weight:700;color:var(--orange);
+    background:#fff1e6;border-radius:999px;padding:3px 12px;margin-bottom:10px}
+  h1{font-size:26px;margin:6px 0 6px;line-height:1.35}
+  h2{font-size:20px;margin:34px 0 12px;display:flex;align-items:center;gap:8px}
+  h2 .n{display:inline-flex;width:28px;height:28px;border-radius:50%;background:var(--orange);
+    color:#fff;font-size:15px;align-items:center;justify-content:center;flex:none}
+  .lead{color:var(--muted);font-size:15px;margin:0 0 18px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:18px 20px;margin:14px 0}
+  .badges{display:flex;flex-wrap:wrap;gap:8px;margin:14px 0 0}
+  .badge{font-size:13px;font-weight:700;border-radius:999px;padding:6px 14px}
+  .b-green{background:var(--green-bg);color:var(--green)}
+  .b-blue{background:var(--blue-bg);color:var(--blue)}
+  /* privacy block */
+  .safe{background:var(--green-bg);border:1px solid #bfe6cf;border-radius:16px;padding:20px 22px;margin:18px 0}
+  .safe h3{margin:0 0 12px;color:var(--green);font-size:19px;display:flex;align-items:center;gap:8px}
+  .safe ul{margin:0;padding:0;list-style:none;display:grid;gap:10px}
+  .safe li{display:flex;gap:10px;align-items:flex-start;font-size:15px}
+  .safe li .ic{flex:none;width:24px;height:24px;border-radius:50%;background:var(--green);color:#fff;
+    display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:800}
+  .safe .why{margin:12px 0 0;font-size:13px;color:#3a6b50;background:#d8efe1;border-radius:10px;padding:10px 12px}
+  /* loop */
+  .loop{display:flex;flex-wrap:wrap;align-items:stretch;gap:8px;margin:6px 0}
+  .step{flex:1 1 120px;min-width:108px;background:#fff;border:1px solid var(--line);border-radius:12px;
+    padding:12px 10px;text-align:center}
+  .step .st{font-weight:800;font-size:15px}
+  .step .sd{font-size:12px;color:var(--muted);margin-top:3px}
+  .step.coach{background:#fff7ec;border:2px solid var(--amber)}
+  .step.coach .st{color:var(--amber)}
+  .step.review{background:#e6f6f0;border:1px solid #b9e6d3}
+  .step.review .st{color:var(--green)}
+  .arrow{align-self:center;color:#c2bcb2;font-weight:800;flex:none}
+  .loopback{font-size:13px;color:var(--muted);text-align:center;margin-top:8px}
+  /* player card */
+  .pcard{max-width:420px;margin:0 auto}
+  .pchead{display:flex;align-items:center;gap:12px}
+  .ava{width:50px;height:50px;border-radius:50%;background:#fff1e6;color:var(--orange);
+    display:flex;align-items:center;justify-content:center;font-weight:800;font-size:18px}
+  .ovr{margin-left:auto;text-align:center;background:#f4f1ec;border-radius:10px;padding:5px 12px}
+  .ovr .l{font-size:11px;color:var(--muted)}
+  .ovr .v{font-size:24px;font-weight:800;color:var(--orange)}
+  .chips{display:flex;flex-wrap:wrap;gap:6px;justify-content:center;margin-top:8px}
+  .chip{font-size:12px;background:#f4f1ec;border-radius:8px;padding:3px 10px}
+  /* practice menu */
+  .drill{display:flex;align-items:flex-start;gap:10px;padding:10px 0;border-top:1px solid var(--line)}
+  .drill:first-of-type{border-top:none}
+  .drill .chk{width:20px;height:20px;border:2px solid var(--green);border-radius:6px;flex:none;margin-top:2px;
+    display:flex;align-items:center;justify-content:center;color:var(--green);font-weight:800;font-size:13px}
+  .drill .body b{display:block}
+  .drill .body span{font-size:13px;color:var(--muted)}
+  .drill .lv{margin-left:auto;font-size:12px;color:var(--amber);white-space:nowrap}
+  .coachbar{display:flex;gap:10px;align-items:center;margin-top:14px;padding-top:14px;border-top:1px dashed var(--line);flex-wrap:wrap}
+  .coachbar .who{font-size:13px;color:var(--amber);font-weight:700}
+  .btn{font-size:14px;font-weight:700;border-radius:10px;padding:8px 16px;border:none;cursor:default}
+  .btn-edit{background:#fff;border:1px solid var(--amber);color:var(--amber)}
+  .btn-ok{background:var(--green);color:#fff}
+  /* review mock */
+  .stars{font-size:22px}
+  .fb{display:flex;gap:10px;align-items:flex-start;background:#f8f6f2;border-radius:12px;padding:10px 12px;margin-top:8px}
+  .fb b{display:block}
+  .fb.good{border-left:5px solid var(--green)}
+  .fb.tip{border-left:5px solid var(--amber)}
+  .note{font-size:13px;color:var(--muted);margin-top:8px}
+  .principle{display:flex;gap:10px;margin:10px 0}
+  .principle .k{font-weight:800;color:var(--orange);flex:none;width:120px}
+  .status{display:grid;grid-template-columns:1fr;gap:8px}
+  .srow{display:flex;gap:10px;align-items:center;font-size:14px}
+  .pill{font-size:12px;font-weight:700;border-radius:999px;padding:3px 10px;flex:none}
+  .pill.now{background:var(--green-bg);color:var(--green)}
+  .pill.soon{background:#f4f1ec;color:var(--muted)}
+  .foot{margin-top:30px;font-size:12px;color:var(--muted);text-align:center;border-top:1px solid var(--line);padding-top:16px}
+  @media print{body{background:#fff}.card,.safe{break-inside:avoid}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <span class="tag">サンプル資料 ・ コーチ／保護者向け</span>
+  <h1>バスケ 1on1 育成ツール（仮）</h1>
+  <p class="lead">スマホで撮るだけ。選手一人ひとりの力を「見える化」し、弱点に合った練習を提案します。<br>
+  分析はすべて<b>スマホの中だけ</b>で行い、動画はどこにも送りません。</p>
+  <div class="badges">
+    <span class="badge b-green">解析は端末内（オフライン可）</span>
+    <span class="badge b-green">動画は端末から出ません</span>
+    <span class="badge b-blue">共有はチームのGoogle Driveだけ</span>
+    <span class="badge b-blue">無料・広告なし</span>
+  </div>
+
+  <!-- PRIVACY: prominent, near top -->
+  <div class="safe">
+    <h3>🔒 まず、安心してください</h3>
+    <ul>
+      <li><span class="ic">✓</span><div><b>動画はインターネットに送りません。</b> 解析はその場でスマホの中だけで行い、動画は端末から出ません。</div></li>
+      <li><span class="ic">✓</span><div><b>顔認識はしません。</b> 誰の動画かは、登録名簿から手で選ぶだけです。</div></li>
+      <li><span class="ic">✓</span><div><b>共有するのは成績データ（数値・名前）だけ。</b> チーム専用の Google ドライブ（Classroom と同じ Google アカウント）にのみ同期します。</div></li>
+      <li><span class="ic">✓</span><div><b>第三者のサーバーには送りません。</b> データは <b>あなた方チーム自身の Google アカウント</b>の中だけで管理されます。</div></li>
+      <li><span class="ic">✓</span><div><b>動画は同期されません。</b> 各端末の中だけに残り、消せば一緒に消えます。</div></li>
+    </ul>
+    <p class="why">なぜ安全か：解析する AI は<b>スマホの中で動く</b>ので、動画を外に送らずに分析が完結します。チームで共有が必要な「成績データ（数値）」だけが、<b>あなた方チーム自身の Google ドライブ</b>（新しい外部サービスではなく、すでに Classroom で使っている Google）に保存されます。動画は一切同期されません。</p>
+  </div>
+
+  <h2><span class="n">1</span>これは何？</h2>
+  <p>チームの選手を名簿に登録し、1on1や練習を撮影 → AIが体の動き（姿勢）を解析 → 一人ひとりの力を<b>選手カード</b>にし、弱点に合った<b>練習メニューを提案</b>します。練習も撮ってレビュー、を繰り返して伸ばします。<b>提案するだけで、決めるのはコーチ</b>です。</p>
+
+  <h2><span class="n">2</span>全体の流れ</h2>
+  <div class="card">
+    <div class="loop">
+      <div class="step"><div class="st">記録</div><div class="sd">1on1・練習を撮影</div></div>
+      <div class="arrow">→</div>
+      <div class="step"><div class="st">能力カード</div><div class="sd">力を推定</div></div>
+      <div class="arrow">→</div>
+      <div class="step"><div class="st">練習提案</div><div class="sd">弱点に合わせて</div></div>
+      <div class="arrow">→</div>
+      <div class="step coach"><div class="st">コーチ確認・修正</div><div class="sd">最終判断はコーチ</div></div>
+      <div class="arrow">→</div>
+      <div class="step"><div class="st">練習＆撮影</div><div class="sd">やってみる</div></div>
+      <div class="arrow">→</div>
+      <div class="step review"><div class="st">レビュー</div><div class="sd">動きを採点</div></div>
+    </div>
+    <p class="loopback">↻ 練習・試合を重ねるほど、カードの精度が上がっていきます</p>
+  </div>
+
+  <h2><span class="n">3</span>選手カード（サンプル）</h2>
+  <p class="lead">各選手の力を、ゲームのステータスのように表示します。下の数値はすべてサンプルです。</p>
+  <div class="card pcard">
+    <div class="pchead">
+      <div class="ava">RT</div>
+      <div>
+        <div style="font-weight:700;font-size:16px">リョウ・タナカ <span style="color:var(--muted);font-weight:400">#7</span></div>
+        <div style="font-size:13px;color:var(--muted)">ガード ・ サンプル選手</div>
+      </div>
+      <div class="ovr"><div class="l">そうごう</div><div class="v">72</div></div>
+    </div>
+    <div style="position:relative;height:280px;margin:8px 0 4px"><canvas id="radar"></canvas></div>
+    <div class="chips">
+      <span class="chip">スピード 78</span><span class="chip">パワー 62</span>
+      <span class="chip">ドリブル 71</span><span class="chip">シュート 65</span>
+      <span class="chip">ディフェンス 80</span><span class="chip">クイックネス 74</span>
+    </div>
+    <p class="note" style="text-align:center">推定値 ・ チーム内の相対と、伸びの推移で見るのがおすすめです</p>
+  </div>
+
+  <h2><span class="n">4</span>練習メニュー提案（サンプル）</h2>
+  <p class="lead">カードの弱点（この例ではパワー・シュート）に合わせて、自動で練習を提案します。<b>これはあくまで提案です。</b></p>
+  <div class="card">
+    <div style="font-weight:700;margin-bottom:6px">今週の おすすめメニュー <span style="color:var(--muted);font-weight:400;font-size:13px">（#7 リョウ向け・提案）</span></div>
+    <div class="drill"><div class="chk">✓</div><div class="body"><b>シュートフォーム 10本 ×3セット</b><span>リリースで腕を伸ばしきる意識</span></div><div class="lv">やさしい</div></div>
+    <div class="drill"><div class="chk">✓</div><div class="body"><b>パワーステップ＆ジャンプ 反復</b><span>ひざを深く曲げて爆発的に</span></div><div class="lv">ふつう</div></div>
+    <div class="drill"><div class="chk">✓</div><div class="body"><b>クロスオーバー → プルアップ</b><span>低く速く、止まって素早くシュート</span></div><div class="lv">ふつう</div></div>
+    <div class="coachbar">
+      <span class="who">👈 コーチが最終判断</span>
+      <span style="font-size:13px;color:var(--muted)">メニューを 入れ替え／追加／外す ことができます</span>
+      <span style="margin-left:auto"></span>
+      <button class="btn btn-edit">修正する</button>
+      <button class="btn btn-ok">承認する</button>
+    </div>
+  </div>
+
+  <h2><span class="n">5</span>レビュー（サンプル）</h2>
+  <p class="lead">提案した練習を撮ると、その動きを採点します（このレビュー機能はすでに実機で動いています）。</p>
+  <div class="card">
+    <div class="stars">⭐⭐</div>
+    <div class="fb good"><div>🦵</div><div><b>ひざが よくまがってる！</b>あしの力で とおくまで とばせるよ</div></div>
+    <div class="fb tip"><div>💪</div><div><b>うでを うえに ピンと のばそう</b>ボールを おすとき ひじを のばしきろう</div></div>
+    <p class="note">※ 子ども向けに「ほめ1つ＋なおす1つ」だけ表示します。</p>
+  </div>
+
+  <h2><span class="n">6</span>コーチが主役（最終判断）</h2>
+  <div class="card" style="border-color:#f0d9a8;background:#fffaf0">
+    <p style="margin:0 0 10px"><b>このツールは「提案」までです。決めるのはコーチです。</b></p>
+    <ul style="margin:0;padding-left:20px">
+      <li>能力カードの判定が実感と違えば、<b>コーチが上書き・調整</b>できます。</li>
+      <li>練習メニューは、<b>入れ替え・追加・削除</b>して承認できます。</li>
+      <li>ツールの数値は参考材料。<b>現場の目が最優先</b>です。</li>
+    </ul>
+  </div>
+
+  <h2><span class="n">7</span>数値の見方（正直なお願い）</h2>
+  <div class="principle"><div class="k">推定値です</div><div>スマホ映像からの「推定」で、計測器の値ではありません。少し幅をもって見てください。</div></div>
+  <div class="principle"><div class="k">相対で見る</div><div>「絶対の速さ」より「チームの中で誰が速いか」が得意です。</div></div>
+  <div class="principle"><div class="k">推移で見る</div><div>一回の数値より、シーズンを通して<b>伸びているか</b>が大事です。</div></div>
+  <div class="principle"><div class="k">重ねるほど</div><div>記録が増えるほど、カードの精度・確からしさが上がります。</div></div>
+
+  <h2><span class="n">8</span>今できること / これから</h2>
+  <div class="status card">
+    <div class="srow"><span class="pill now">稼働中</span><span>シュート／ドリブル／ディフェンスの動画レビュー（実機で動作確認済み）</span></div>
+    <div class="srow"><span class="pill now">稼働中</span><span>練習の記録・週次グラフ（端末内）</span></div>
+    <div class="srow"><span class="pill soon">開発中</span><span>選手名簿・能力カード</span></div>
+    <div class="srow"><span class="pill soon">開発中</span><span>1on1の複数人解析（攻守 両者へアドバイス）</span></div>
+    <div class="srow"><span class="pill soon">開発中</span><span>能力推定 → 練習メニュー提案</span></div>
+  </div>
+
+  <div class="foot">
+    この資料は構想説明のための<b>サンプル</b>です。選手名・数値はすべて架空のものです。<br>
+    実際のツールでは、動画は各自の端末内でのみ扱われ外部に送信されません。成績データ（数値）はチーム自身の Google ドライブにのみ同期されます。
+  </div>
+
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script>
+  new Chart(document.getElementById('radar'), {
+    type:'radar',
+    data:{ labels:['スピード','パワー','ドリブル','シュート','ディフェンス','クイックネス'],
+      datasets:[{ data:[78,62,71,65,80,74], backgroundColor:'rgba(232,93,4,0.15)',
+        borderColor:'#e85d04', borderWidth:2, pointBackgroundColor:'#e85d04', pointRadius:3 }] },
+    options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}},
+      scales:{ r:{ min:0, max:100, ticks:{stepSize:20, display:false},
+        grid:{color:'rgba(0,0,0,0.10)'}, angleLines:{color:'rgba(0,0,0,0.10)'},
+        pointLabels:{ color:'#444', font:{size:13} } } } }
+  });
+</script>
+</body>
+</html>

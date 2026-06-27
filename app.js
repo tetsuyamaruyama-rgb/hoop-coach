@@ -418,5 +418,98 @@ $('clearBtn').addEventListener('click', () => {
   if (confirm('れんしゅうの きろくを ぜんぶ けします。いいですか？')) { localStorage.removeItem(LOG_KEY); showHistory(); }
 });
 
+// ---- team roster + player cards (sample / demo, on-device) ----
+const ROSTER_KEY = 'hoopRoster_v1';
+const PARAMS = [
+  { k: 'speed', l: 'スピード' }, { k: 'power', l: 'パワー' }, { k: 'dribble', l: 'ドリブル' },
+  { k: 'shoot', l: 'シュート' }, { k: 'defense', l: 'ディフェンス' }, { k: 'quick', l: 'クイックネス' },
+];
+const DRILLS = {
+  speed: [['ダッシュ＆敏捷ラダー', '一歩目を速く', 'ふつう']],
+  power: [['パワーステップ＆ジャンプ反復', 'ひざを深く曲げて爆発的に', 'ふつう'], ['スクワットジャンプ', 'まっすぐ高く', 'やさしい']],
+  dribble: [['クロスオーバー／レッグスルー反復', '低く速く、体に近く', 'ふつう'], ['低いドリブル制御', 'こしを落として', 'やさしい']],
+  shoot: [['シュートフォーム 10本×3', 'リリースで腕を伸ばしきる', 'やさしい'], ['フォロースルー意識', 'なげた後、手を高く', 'やさしい']],
+  defense: [['ディフェンススライド', '低い姿勢を保つ', 'ふつう'], ['1on1 止める反復', '相手とゴールの間に', 'むずかしい']],
+  quick: [['方向転換ドリル', '切り返しを鋭く', 'ふつう'], ['第一歩クイックネス', '反応して素早く', 'ふつう']],
+};
+function seedRoster() {
+  return [
+    { id: 'a', name: '選手A', pos: 'ガード', num: '4', stats: { speed: 78, power: 62, dribble: 71, shoot: 65, defense: 80, quick: 74 } },
+    { id: 'b', name: '選手B', pos: 'フォワード', num: '7', stats: { speed: 65, power: 82, dribble: 58, shoot: 70, defense: 68, quick: 60 } },
+    { id: 'c', name: '選手C', pos: 'センター', num: '10', stats: { speed: 55, power: 88, dribble: 50, shoot: 60, defense: 75, quick: 52 } },
+  ];
+}
+function loadRoster() {
+  try { const r = JSON.parse(localStorage.getItem(ROSTER_KEY)); if (r && r.length) return r; } catch (e) {}
+  const s = seedRoster(); try { localStorage.setItem(ROSTER_KEY, JSON.stringify(s)); } catch (e) {} return s;
+}
+const overall = (s) => Math.round(PARAMS.reduce((a, p) => a + s[p.k], 0) / PARAMS.length);
+
+function renderRoster() {
+  const list = $('rosterList'); list.innerHTML = '';
+  loadRoster().forEach((p) => {
+    const row = document.createElement('button'); row.className = 'player-row';
+    row.innerHTML = `<span class="pr-ava">${p.num}</span>`
+      + `<span class="pr-body"><b>${p.name}</b><span>${p.pos}</span></span>`
+      + `<span class="pr-ovr"><span class="l">そうごう</span><span class="v">${overall(p.stats)}</span></span>`;
+    row.onclick = () => openPlayer(p.id);
+    list.appendChild(row);
+  });
+}
+function radarSVG(stats) {
+  const cx = 120, cy = 122, R = 76, n = PARAMS.length;
+  const ang = (i) => (-90 + i * 360 / n) * Math.PI / 180;
+  const pt = (i, rad) => [cx + Math.cos(ang(i)) * rad, cy + Math.sin(ang(i)) * rad];
+  let grid = '';
+  [0.25, 0.5, 0.75, 1].forEach((f) => {
+    const pts = PARAMS.map((_, i) => pt(i, R * f).map((v) => v.toFixed(1)).join(',')).join(' ');
+    grid += `<polygon points="${pts}" fill="none" stroke="#2b3647" stroke-width="1"/>`;
+  });
+  let axes = '', labels = '';
+  PARAMS.forEach((p, i) => {
+    const [x, y] = pt(i, R); axes += `<line x1="${cx}" y1="${cy}" x2="${x.toFixed(1)}" y2="${y.toFixed(1)}" stroke="#2b3647" stroke-width="1"/>`;
+    const [lx, ly] = pt(i, R + 15); const anc = lx < cx - 5 ? 'end' : (lx > cx + 5 ? 'start' : 'middle');
+    labels += `<text x="${lx.toFixed(1)}" y="${(ly + 4).toFixed(1)}" text-anchor="${anc}" font-size="11" fill="#9fb2cc">${p.l}</text>`;
+  });
+  const clamp = (v) => Math.max(0, Math.min(100, v));
+  const vpts = PARAMS.map((p, i) => pt(i, R * clamp(stats[p.k]) / 100).map((v) => v.toFixed(1)).join(',')).join(' ');
+  const dots = PARAMS.map((p, i) => { const [x, y] = pt(i, R * clamp(stats[p.k]) / 100); return `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="3.2" fill="#ff9a3d"/>`; }).join('');
+  return `<svg viewBox="0 0 240 248" width="100%" style="max-width:300px;display:block;margin:4px auto 0" aria-label="能力レーダー">`
+    + `${grid}${axes}<polygon points="${vpts}" fill="rgba(255,138,43,0.22)" stroke="#ff8a2b" stroke-width="2"/>${dots}${labels}</svg>`;
+}
+function suggestMenu(stats) {
+  const weak = PARAMS.slice().sort((a, b) => stats[a.k] - stats[b.k]).slice(0, 2);
+  const drills = [];
+  weak.forEach((p) => (DRILLS[p.k] || []).forEach((d) => { if (drills.length < 3) drills.push(d); }));
+  return { weak, drills };
+}
+function openPlayer(id) {
+  const p = loadRoster().find((x) => x.id === id); if (!p) return;
+  const chips = PARAMS.map((pr) => `<span class="chip">${pr.l} ${p.stats[pr.k]}</span>`).join('');
+  const { weak, drills } = suggestMenu(p.stats);
+  const drillHTML = drills.map((d) => `<div class="drill"><div class="chk">✓</div><div class="body"><b>${d[0]}</b><span>${d[1]}</span></div><div class="lv">${d[2]}</div></div>`).join('');
+  $('playerCard').innerHTML =
+    `<div class="card pcard">`
+    + `<div class="pchead"><div class="ava">${p.num}</div>`
+    + `<div><div style="font-weight:700;font-size:16px">${p.name} <span style="color:#9ca3af;font-weight:400">#${p.num}</span></div>`
+    + `<div style="font-size:13px;color:#9fb2cc">${p.pos} ・ サンプル選手</div></div>`
+    + `<div class="ovr"><div class="l">そうごう</div><div class="v">${overall(p.stats)}</div></div></div>`
+    + radarSVG(p.stats)
+    + `<div class="chips">${chips}</div>`
+    + `<p class="note" style="text-align:center;margin-top:8px">推定値（サンプル）・チーム内の相対と伸びの推移で見る</p></div>`
+    + `<div class="card"><div style="font-weight:700;margin-bottom:4px">おすすめ練習メニュー `
+    + `<span style="color:#9fb2cc;font-weight:400;font-size:13px">（弱点：${weak.map((w) => w.l).join('・')}・あくまで提案）</span></div>`
+    + drillHTML
+    + `<div class="coachbar"><span class="who">👈 コーチが最終判断</span><span style="margin-left:auto"></span>`
+    + `<button class="btn btn-edit" id="menuEdit">修正する</button><button class="btn btn-ok" id="menuOk">承認する</button></div>`
+    + `<p id="coachMsg" class="note" style="margin-top:8px;display:none"></p></div>`;
+  $('menuOk').onclick = () => { const m = $('coachMsg'); m.style.display = 'block'; m.textContent = '✓ コーチが承認しました（デモ）'; m.style.color = '#3fe0a2'; };
+  $('menuEdit').onclick = () => { const m = $('coachMsg'); m.style.display = 'block'; m.textContent = '（デモ）ここでメニューの入れ替え・追加・削除ができます'; m.style.color = '#9fb2cc'; };
+  showScreen('player');
+}
+$('rosterBtn').addEventListener('click', () => { renderRoster(); showScreen('roster'); });
+$('rosterBackBtn').addEventListener('click', () => showScreen('home'));
+$('playerBackBtn').addEventListener('click', () => { renderRoster(); showScreen('roster'); });
+
 // expose a couple of helpers for quick verification in the preview
-window.__hoop = { saveSession, loadLog, showHistory, analyzeDribble, analyzeDefense, analyzeFile, analyzeShooting, ANALYZERS, getDetector };
+window.__hoop = { saveSession, loadLog, showHistory, analyzeDribble, analyzeDefense, analyzeFile, analyzeShooting, ANALYZERS, getDetector, loadRoster, renderRoster, openPlayer, suggestMenu };

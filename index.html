@@ -5,12 +5,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no" />
   <title>バスケコーチ Kids</title>
   <link rel="manifest" href="manifest.json" />
-  <meta name="theme-color" content="#ff7a18" />
+  <meta name="theme-color" content="#0e1320" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="バスケコーチ" />
   <link rel="apple-touch-icon" href="icons/icon-180.png" />
-  <link rel="stylesheet" href="styles.css?v=6" />
+  <link rel="stylesheet" href="styles.css?v=8" />
 </head>
 <body>
   <div id="app">
@@ -37,6 +37,7 @@
         <small>かまえを みてもらう</small>
       </button>
       <input id="videoInput" type="file" accept="video/*" hidden />
+      <button class="link-btn" id="rosterBtn">👥 チーム・選手カード（サンプル）</button>
       <button class="link-btn" id="historyBtn">📒 れんしゅうの きろくを みる</button>
     </section>
 
@@ -75,6 +76,20 @@
       <button class="link-btn danger" id="clearBtn">🗑️ きろくを ぜんぶ けす</button>
     </section>
 
+    <!-- ROSTER (team) -->
+    <section id="screen-roster" class="screen">
+      <h2 class="h2">👥 チーム（サンプル）</h2>
+      <p class="note" style="margin:0 0 12px">選手をタップすると、能力カードと練習提案が見られます。</p>
+      <div id="rosterList"></div>
+      <button class="big-btn secondary" id="rosterBackBtn">⬅️ もどる</button>
+    </section>
+
+    <!-- PLAYER CARD -->
+    <section id="screen-player" class="screen">
+      <div id="playerCard"></div>
+      <button class="big-btn secondary" id="playerBackBtn">⬅️ せんしゅ一覧</button>
+    </section>
+
     <!-- ERROR -->
     <section id="screen-error" class="screen">
       <div class="emoji big">😅</div>
@@ -87,6 +102,6 @@
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-converter@4.20.0/dist/tf-converter.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-webgl@4.20.0/dist/tf-backend-webgl.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection@2.1.3/dist/pose-detection.min.js"></script>
-  <script src="app.js?v=6"></script>
+  <script src="app.js?v=8"></script>
 </body>
 </html>

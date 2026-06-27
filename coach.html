@@ -47,6 +47,19 @@
   .step.review .st{color:var(--green)}
   .arrow{align-self:center;color:#c2bcb2;font-weight:800;flex:none}
   .loopback{font-size:13px;color:var(--muted);text-align:center;margin-top:8px}
+  /* architecture */
+  .arch{border:2px dashed var(--green);border-radius:16px;padding:14px 14px 16px;background:#f3fbf6}
+  .arch-h{text-align:center;font-weight:800;color:var(--green);font-size:15px;margin-bottom:8px}
+  .arch-label{font-size:12px;font-weight:700;color:var(--muted);margin:8px 0 4px}
+  .arch-boxes{display:flex;flex-wrap:wrap;gap:8px}
+  .arch-box{flex:1;min-width:120px;text-align:center;border-radius:10px;padding:8px 10px;font-size:13px;font-weight:700;border:1px solid var(--line);background:#fff}
+  .arch-box small{display:block;font-weight:400;font-size:11px;color:var(--muted);margin-top:2px}
+  .arch-box.bx-in{background:#e9f1fc;border-color:#cfe0f7;color:#1769d6}
+  .arch-box.bx-ai{background:#fff1e6;border-color:#f3d3b5;color:#c05a12}
+  .arch-box.bx-db{background:#f4f1ec;border-color:#e3ddd0;color:#6b6457}
+  .arch-box.bx-out{background:#e7f6ee;border-color:#bfe6cf;color:#1f9d63}
+  .arch-box.bx-in small,.arch-box.bx-ai small,.arch-box.bx-db small,.arch-box.bx-out small{color:inherit;opacity:.75}
+  .arch-arrow{text-align:center;color:#9aa0a6;font-weight:800;font-size:18px;margin:2px 0}
   /* player card */
   .pcard{max-width:420px;margin:0 auto}
   .pchead{display:flex;align-items:center;gap:12px}
@@ -119,7 +132,7 @@
   <p>チームの選手を名簿に登録し、<b>1on1を録画</b> → AIが体の動き（姿勢）を解析 → 一人ひとりの力を<b>選手カード</b>にし、弱点に合った<b>練習メニューを提案</b>します。練習も撮ってレビュー、を繰り返して伸ばします。<b>提案するだけで、決めるのはコーチ</b>です。</p>
   <p style="background:#fff7ec;border-radius:12px;padding:12px 14px;font-size:14px"><b>📱 撮影はかんたん。</b> 1on1を撮りながら、攻守交替のたびに <b>1タップ</b>するだけ。1回ごとの攻撃が自動でクリップに分かれ、攻め・守りも自動で入れ替わって記録されます（攻守を選び直す手間なし）。</p>
 
-  <h2><span class="n">2</span>全体の流れ</h2>
+  <h2><span class="n">2</span>全体の流れと 仕組み</h2>
   <div class="card">
     <div class="loop">
       <div class="step"><div class="st">記録</div><div class="sd">1on1を録画（攻守1タップ）</div></div>
@@ -136,6 +149,44 @@
     </div>
     <p class="loopback">↻ 練習・試合を重ねるほど、カードの精度が上がっていきます</p>
   </div>
+
+  <p class="lead" style="margin-bottom:8px">ツールの 全体構成（どこで 何が 動くか）：</p>
+  <div class="arch">
+    <div class="arch-h">📱 すべて この端末（スマホ）の 中</div>
+
+    <div class="arch-label">① 入力（撮る）</div>
+    <div class="arch-boxes">
+      <div class="arch-box bx-in">1on1 録画<br><small>連続＋ワンタップ攻守交替</small></div>
+      <div class="arch-box bx-in">スキル動画<br><small>角度（正面/横）を選択</small></div>
+      <div class="arch-box bx-in">お手本動画<br><small>コーチ／参考動画</small></div>
+    </div>
+    <div class="arch-arrow">↓</div>
+
+    <div class="arch-label">② 端末内AI（解析・採点）</div>
+    <div class="arch-boxes">
+      <div class="arch-box bx-ai">姿勢を解析<br><small>AIが体の動きを測定（端末内）</small></div>
+      <div class="arch-box bx-ai">採点<br><small>お手本基準 or 標準・角度認識（◎○△）</small></div>
+    </div>
+    <div class="arch-arrow">↓</div>
+
+    <div class="arch-label">③ データ（端末内に保存）</div>
+    <div class="arch-boxes">
+      <div class="arch-box bx-db">コーチ名簿</div>
+      <div class="arch-box bx-db">選手名簿・カード</div>
+      <div class="arch-box bx-db">お手本（基準）</div>
+      <div class="arch-box bx-db">練習ログ</div>
+    </div>
+    <div class="arch-arrow">↓</div>
+
+    <div class="arch-label">④ 出力（見る）</div>
+    <div class="arch-boxes">
+      <div class="arch-box bx-out">スキル評価<br><small>◎○△＋アドバイス</small></div>
+      <div class="arch-box bx-out">1on1 レビュー<br><small>攻守 両者へ</small></div>
+      <div class="arch-box bx-out">選手カード<br><small>能力レーダー</small></div>
+      <div class="arch-box bx-out">練習メニュー<br><small>提案→コーチ承認</small></div>
+    </div>
+  </div>
+  <p class="note" style="margin-top:8px">↻ ④の練習を また ①で撮って くりかえし。<b>動画は この枠（端末）の外に 出ません。</b>（将来：成績データ＜数値＞だけ チームの Google ドライブへ・同意制）</p>
 
   <h2><span class="n">3</span>選手カード（サンプル）</h2>
   <p class="lead">各選手の力を、ゲームのステータスのように表示します。下の数値はすべてサンプルです。</p>
@@ -200,11 +251,13 @@
 
   <h2><span class="n">8</span>今できること / これから</h2>
   <div class="status card">
-    <div class="srow"><span class="pill now">稼働中</span><span>1on1の録画（連続録画＋ワンタップ攻守交替で自動クリップ化）— iPhone実機で確認済み</span></div>
-    <div class="srow"><span class="pill now">稼働中</span><span>シュート／ドリブル／ディフェンスの動画レビュー</span></div>
+    <div class="srow"><span class="pill now">稼働中</span><span>1on1の録画（連続＋ワンタップ攻守交替・iPhone確認済み）＋ 動画の端末保存</span></div>
+    <div class="srow"><span class="pill now">稼働中</span><span>シュート／ドリブル（4種：ノーマル・フロント/バックチェンジ・レッグスルー）／ディフェンスのレビュー</span></div>
+    <div class="srow"><span class="pill now">稼働中</span><span>角度認識採点（正面/横で 測れる項目だけ）＋ ◎○△の3段階</span></div>
+    <div class="srow"><span class="pill now">稼働中</span><span>コーチ名簿・お手本（基準）登録（コーチ／参考動画）→ お手本基準で採点</span></div>
     <div class="srow"><span class="pill now">稼働中</span><span>選手名簿・能力カード・練習メニュー提案・コーチ承認（サンプル）</span></div>
     <div class="srow"><span class="pill now">稼働中</span><span>練習の記録・週次グラフ（端末内）</span></div>
-    <div class="srow"><span class="pill soon">開発中</span><span>1on1の複数人AI解析（攻守 両者の自動評価・ポジショニング）</span></div>
+    <div class="srow"><span class="pill soon">開発中</span><span>1on1の複数人AI解析（攻守 両者の自動評価・ポジショニング）→ コーチを基準にした1on1の数値化</span></div>
     <div class="srow"><span class="pill soon">開発中</span><span>能力推定を サンプル → 実データへ</span></div>
     <div class="srow"><span class="pill soon">開発中</span><span>チームでの Googleドライブ共有（同意制・成績データのみ）</span></div>
   </div>

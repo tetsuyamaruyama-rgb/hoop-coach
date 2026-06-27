@@ -1,6 +1,6 @@
 // Service worker: cache the app shell + the TensorFlow/MoveNet model so the
 // app works FULLY OFFLINE after the first load. Video is never uploaded.
-const CACHE = 'hoop-coach-v11';
+const CACHE = 'hoop-coach-v12';
 const SHELL = [
   './',
   './index.html',

@@ -84,6 +84,7 @@ header h1 span{color:var(--orange)}
 .metric .v{font-size:22px;font-weight:800}
 .metric .l{font-size:12px;color:var(--muted);margin-top:2px}
 .metric.ok .v{color:var(--good)}
+.metric.mid .v{color:var(--blue)}
 .metric.no .v{color:var(--warn)}
 .saved-note{text-align:center;color:var(--good);font-weight:700;font-size:14px;margin:14px 0 0}
 

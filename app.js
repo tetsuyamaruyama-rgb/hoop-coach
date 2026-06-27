@@ -142,7 +142,13 @@ function deepestKneeIdx(frames, side) {
   return idx;
 }
 
-// ---- analyzers: each returns {keyIdx, side, metrics:[{good,value,label,praise,tip}]} ----
+// ---- grading: 3 tiers (2=◎ strict / 1=○ ok / 0=△ needs work). Bars set demanding. ----
+const lvlLow = (v, good, ok) => (v <= good ? 2 : v <= ok ? 1 : 0);  // smaller is better
+const lvlHigh = (v, good, ok) => (v >= good ? 2 : v >= ok ? 1 : 0); // larger is better
+const lvlBand = (v, gLo, gHi, oLo, oHi) => (v >= gLo && v <= gHi ? 2 : v >= oLo && v <= oHi ? 1 : 0);
+function metric(level, value, label, praise, tip) { return { level, good: level === 2, value, label, praise, tip }; }
+
+// ---- analyzers: each returns {keyIdx, side, metrics:[{level,value,label,praise,tip}]} ----
 function analyzeShooting({ frames }) {
   // shooting hand = wrist that reaches the highest point
   let side = 'right', minY = Infinity;
@@ -158,9 +164,9 @@ function analyzeShooting({ frames }) {
     if (a != null && a < mK) { mK = a; loadIdx = i; }
   }
   const rel = frames[relIdx], load = frames[loadIdx], metrics = [];
-  if (isFinite(mK)) metrics.push({ good: mK < 162, value: Math.round(mK) + '°', label: 'ひざのまげ',
-    praise: ['🦵', 'ひざが よくまがってる！', 'あしの ちからで とおくまで とばせるよ'],
-    tip: ['🦵', 'ひざを もうすこし まげよう', 'とぶまえに ひざをまげると ちからが でるよ'] });
+  if (isFinite(mK)) metrics.push(metric(lvlLow(mK, 142, 155), Math.round(mK) + '°', 'ひざのため',
+    ['🦵', 'ひざが ぐっと まがってる！', 'ためが できてて パワーが でる'],
+    ['🦵', 'ひざの ためが あさい', 'もっと 深く しずんでから とぼう（目安 140°台まで）']));
   // peak elbow extension across the shooting phase (a brief moment the coarse
   // scan can miss at the exact release frame) — answers "did he straighten it?"
   let elb = null;
@@ -168,18 +174,23 @@ function analyzeShooting({ frames }) {
     const a = angle(kp(frames[i], S('shoulder')), kp(frames[i], S('elbow')), kp(frames[i], S('wrist')));
     if (a != null && (elb == null || a > elb)) elb = a;
   }
-  if (elb != null) metrics.push({ good: elb > 150, value: Math.round(elb) + '°', label: 'うでの のび',
-    praise: ['💪', 'うでが まっすぐ のびてる！', 'リリースが きれいだよ'],
-    tip: ['💪', 'うでを うえに ピンと のばそう', 'ボールを おすとき ひじを のばしきろう'] });
+  if (elb != null) metrics.push(metric(lvlHigh(elb, 165, 150), Math.round(elb) + '°', 'うでの のび',
+    ['💪', 'うでが 完全に のびてる！', 'リリースが するどい'],
+    ['💪', 'のびきりが あまい', 'ひじを 最後まで のばしきろう（目安 165°以上）']));
   const wr = kp(rel, S('wrist')), nose = kp(rel, 'nose') || kp(rel, S('shoulder'));
-  if (wr && nose) metrics.push({ good: wr.y < nose.y, value: wr.y < nose.y ? 'たかい' : 'ひくい', label: 'フォロースルー',
-    praise: ['🙌', 'てが たかく あがってる！', 'バイバイの かたちが できてるね'],
-    tip: ['🙌', 'なげたあと てを たかく！', 'ゴールに「バイバイ」してみよう'] });
+  if (wr && nose) {
+    const tl = torsoLen(rel) || 1; const fhr = (nose.y - wr.y) / tl;
+    metrics.push(metric(lvlHigh(fhr, 0.18, 0.02), fhr >= 0.18 ? 'たかい' : fhr >= 0.02 ? 'ふつう' : 'ひくい', 'フォロースルー',
+      ['🙌', 'てが あたまの うえまで のびてる！', 'きれいな フォロースルー'],
+      ['🙌', 'フォロースルーが ひくい', 'なげた後、手を あたまより 高く のこそう']));
+  }
   const la = kp(load, 'left_ankle'), ra = kp(load, 'right_ankle'), ls = kp(load, 'left_shoulder'), rs = kp(load, 'right_shoulder');
-  if (la && ra && ls && rs) { const ratio = dist(la, ra) / (dist(ls, rs) || 1); const good = ratio > 0.55 && ratio < 1.9;
-    metrics.push({ good, value: good ? 'バッチリ' : 'なおそう', label: 'あしのはば',
-      praise: ['🦶', 'あしの はばが ちょうどいい！', 'バランスが とれてるよ'],
-      tip: ['🦶', 'あしを かたはばに ひらこう', 'あしを ひらくと ぐらぐら しないよ'] }); }
+  if (la && ra && ls && rs) {
+    const ratio = dist(la, ra) / (dist(ls, rs) || 1); const lv = lvlBand(ratio, 0.85, 1.35, 0.65, 1.6);
+    metrics.push(metric(lv, lv === 2 ? 'バッチリ' : lv === 1 ? 'すこし' : 'なおそう', 'あしのはば',
+      ['🦶', 'あしの はばが 理想的！', 'どっしり 安定してる'],
+      ['🦶', 'あしの はばが いまいち', 'かたはばに そろえよう（広すぎ・せますぎ 注意）']));
+  }
   return { keyIdx: relIdx, side, metrics };
 }
 
@@ -190,22 +201,25 @@ function analyzeDribble({ frames }) {
   const metrics = [];
   // 1) low athletic stance (knee bend, averaged)
   const knees = series(frames, (f) => angle(kp(f, S('hip')), kp(f, S('knee')), kp(f, S('ankle'))));
-  if (knees.length) { const a = avg(knees); metrics.push({ good: a < 168, value: Math.round(a) + '°', label: 'ひくいしせい',
-    praise: ['🔽', 'こしが ひくくて じょうず！', 'ひくいと あいてに とられにくいよ'],
-    tip: ['🔽', 'もうすこし こしを おとそう', 'ひざをまげて ひくく かまえよう'] }); }
+  if (knees.length) { const a = avg(knees); metrics.push(metric(lvlLow(a, 148, 160), Math.round(a) + '°', 'ひくいしせい',
+    ['🔽', 'こしが しっかり ひくい！', 'これなら 簡単に とられない'],
+    ['🔽', 'しせいが 高い', 'もっと こしを 落として（目安 平均145°台）']));
+  }
   // 2) head up (upright torso, not hunched over the ball)
   const leans = series(frames, (f) => { const t = torsoLen(f); if (!t) return null;
     const ls = kp(f, 'left_shoulder'), rs = kp(f, 'right_shoulder'), lh = kp(f, 'left_hip'), rh = kp(f, 'right_hip');
     if (!ls || !rs || !lh || !rh) return null; return Math.abs(mid(ls, rs).x - mid(lh, rh).x) / t; });
-  if (leans.length) { const lean = avg(leans); metrics.push({ good: lean < 0.5, value: lean < 0.5 ? 'まえむき' : 'うつむき', label: 'あたまアップ',
-    praise: ['👀', 'まえを みれてる！', 'ボールを みないで ドリブルできてるね'],
-    tip: ['👀', 'かおを あげよう', 'ボールを みないで まえを みる れんしゅうを'] }); }
+  if (leans.length) { const lean = avg(leans); metrics.push(metric(lvlLow(lean, 0.30, 0.45), lean <= 0.30 ? 'まえむき' : lean <= 0.45 ? 'ややうつむき' : 'うつむき', 'あたまアップ',
+    ['👀', 'しっかり 前を みれてる！', 'ボールを 見ないで つけてる'],
+    ['👀', '前傾して ボールを 見がち', 'かおを 上げて 前を 見たまま つこう']));
+  }
   // 3) rhythm — active hand moves up & down (normalized vertical motion)
   const t0 = avg(series(frames, torsoLen)) || 1;
   const wy = series(frames, (f) => kp(f, S('wrist'))?.y);
-  if (wy.length >= 4) { const amp = std(wy) / t0; metrics.push({ good: amp > 0.08, value: amp > 0.08 ? 'いいリズム' : 'よわい', label: 'リズム',
-    praise: ['🥁', 'いい リズムで ついてる！', 'てを つよく うごかせてるね'],
-    tip: ['🥁', 'もっと つよく つこう', 'ボールを ゆかに つよく たたきつけよう'] }); }
+  if (wy.length >= 4) { const amp = std(wy) / t0; metrics.push(metric(lvlHigh(amp, 0.13, 0.07), amp >= 0.13 ? 'するどい' : amp >= 0.07 ? 'ふつう' : 'よわい', 'リズム・強さ',
+    ['🥁', 'つよく するどく つけてる！', 'ボールが 走ってる'],
+    ['🥁', 'つきが よわい', 'ゆかへ もっと つよく・速く たたきつけよう']));
+  }
   return { keyIdx, side, metrics };
 }
 
@@ -216,21 +230,23 @@ function analyzeDefense({ frames }) {
   const metrics = [];
   // 1) low stance (most important for defense)
   const knees = series(frames, (f) => angle(kp(f, S('hip')), kp(f, S('knee')), kp(f, S('ankle'))));
-  if (knees.length) { const a = avg(knees); metrics.push({ good: a < 160, value: Math.round(a) + '°', label: 'こしを おとす',
-    praise: ['🔽', 'こしが ひくい！ いいかまえ！', 'ひくいと はやく うごけるよ'],
-    tip: ['🔽', 'もっと こしを おとそう', 'ひざを ぐっと まげて ひくく かまえよう'] }); }
+  if (knees.length) { const a = avg(knees); metrics.push(metric(lvlLow(a, 140, 153), Math.round(a) + '°', 'こしを おとす',
+    ['🔽', 'こしが かなり ひくい！ 良い構え', 'これなら 速く 反応できる'],
+    ['🔽', '構えが 高い', 'もっと 腰を 落として（目安 平均140°前後）']));
+  }
   // 2) wide base
   const widths = series(frames, (f) => { const la = kp(f, 'left_ankle'), ra = kp(f, 'right_ankle'), ls = kp(f, 'left_shoulder'), rs = kp(f, 'right_shoulder');
     if (!la || !ra || !ls || !rs) return null; return dist(la, ra) / (dist(ls, rs) || 1); });
-  if (widths.length) { const r = avg(widths); metrics.push({ good: r > 1.05, value: r > 1.05 ? 'ひろい' : 'せまい', label: 'あしのはば',
-    praise: ['🦶', 'あしが ひろくて あんてい！', 'バランスばっちりだね'],
-    tip: ['🦶', 'あしを もっと ひろげよう', 'かたはばより ひろく すると ぐらつかないよ'] }); }
+  if (widths.length) { const r = avg(widths); metrics.push(metric(lvlHigh(r, 1.25, 1.05), r >= 1.25 ? 'ひろい' : r >= 1.05 ? 'ふつう' : 'せまい', 'あしのはば',
+    ['🦶', 'スタンスが ひろくて 安定！', '左右に すばやく 動ける'],
+    ['🦶', 'スタンスが せまい', '肩幅より はっきり 広く 構えよう']));
+  }
   // 3) hands up / active
   const handsUp = frames.filter((f) => { const h = kp(f, S('hip')); const w = kp(f, S('wrist')); return h && w && w.y < h.y; }).length;
   const ratio = frames.length ? handsUp / frames.length : 0;
-  metrics.push({ good: ratio > 0.4, value: ratio > 0.4 ? 'あげてる' : 'さげてる', label: 'てを あげる',
-    praise: ['🙌', 'てを あげて まもれてる！', 'てを あげると パスを とめやすいよ'],
-    tip: ['🙌', 'てを あげよう', 'りょうてを ひろげて あいてを とめよう'] });
+  metrics.push(metric(lvlHigh(ratio, 0.6, 0.35), ratio >= 0.6 ? 'あげてる' : ratio >= 0.35 ? 'ときどき' : 'さげてる', 'てを あげる',
+    ['🙌', 'ずっと 手を あげて 守れてる！', 'パスも シュートも 邪魔できる'],
+    ['🙌', '手が 下がりがち', '両手を 上げ続けて コースを 消そう']));
   return { keyIdx, side, metrics };
 }
 
@@ -299,19 +315,25 @@ function fbCard(kind, [ico, title, sub]) {
   return d;
 }
 function showResult(mode, res, data) {
-  const good = res.metrics.filter((m) => m.good).length;
-  const stars = good >= 3 ? 3 : good === 2 ? 2 : 1;
+  const lvl = (m) => (m.level == null ? (m.good ? 2 : 0) : m.level); // tolerate old shape
+  const sorted = res.metrics.slice().sort((a, b) => lvl(a) - lvl(b)); // worst first
+  const good = res.metrics.filter((m) => lvl(m) === 2).length; // only ◎ counts
+  // demanding scoring: need ALL ◎ for 3 stars
+  const total = res.metrics.length;
+  const stars = good >= total ? 3 : good >= Math.ceil(total / 2) ? 2 : 1;
   $('modeTag').textContent = MODE_LABEL[mode];
   $('scoreStars').textContent = '⭐'.repeat(stars);
-  const goods = res.metrics.filter((m) => m.good), bads = res.metrics.filter((m) => !m.good);
+  const best = res.metrics.filter((m) => lvl(m) === 2)[0];
+  const worst = sorted[0];
   const fb = $('feedback'); fb.innerHTML = '';
-  if (goods[0]) fb.appendChild(fbCard('good', goods[0].praise));
-  else if (res.metrics[0]) fb.appendChild(fbCard('good', ['🏀', 'チャレンジ えらい！', 'やってみる ことが だいじだよ']));
-  if (bads[0]) fb.appendChild(fbCard('tip', bads[0].tip));
-  else fb.appendChild(fbCard('good', ['🎉', 'かんぺき！', 'この ちょうしで れんしゅう しよう！']));
+  if (best) fb.appendChild(fbCard('good', best.praise));
+  else fb.appendChild(fbCard('good', ['🏀', 'チャレンジ えらい！', 'むずかしい 基準だよ。1つずつ よくしよう']));
+  if (worst && lvl(worst) < 2) fb.appendChild(fbCard('tip', worst.tip));
+  else fb.appendChild(fbCard('good', ['🎉', 'パーフェクト！', 'きびしい 基準を 全部 クリア！']));
+  const SYM = { 2: '◎', 1: '○', 0: '△' }, CLS = { 2: 'ok', 1: 'mid', 0: 'no' };
   const mWrap = $('metrics'); mWrap.innerHTML = '';
-  res.metrics.forEach((m) => { const d = document.createElement('div'); d.className = 'metric ' + (m.good ? 'ok' : 'no');
-    d.innerHTML = `<div class="v">${m.good ? '◎' : '△'} ${m.value}</div><div class="l">${m.label}</div>`; mWrap.appendChild(d); });
+  res.metrics.forEach((m) => { const L = lvl(m); const d = document.createElement('div'); d.className = 'metric ' + CLS[L];
+    d.innerHTML = `<div class="v">${SYM[L]} ${m.value}</div><div class="l">${m.label}</div>`; mWrap.appendChild(d); });
   saveSession(mode, stars, good, res.metrics.length);
   showScreen('result');
   setupResultVideo(data, res); // after the screen is visible so the video has a size
@@ -540,6 +562,23 @@ const DEF_TIP = {
   speed: ['⚡', 'スライドの 足を 速く', ''],
   power: ['💪', '当たり負けに 注意', ''],
 };
+const OFF_PT = {
+  speed: ['🏃', 'スピードの ミスマッチ', '外から アタックして 一気に 抜き去ろう'],
+  power: ['🪨', 'フィジカルで 優位', 'ゴール下で 体を ぶつけて 強気に'],
+  dribble: ['🌀', 'ハンドリングで 優位', '緩急と チェンジで ズレを 作ろう'],
+  shoot: ['🎯', 'シュート力で 警戒させる', 'ドライブと シュートの 二択で 揺さぶる'],
+  quick: ['⚡', 'クイックネスで 優位', 'タメ→爆発の 緩急で 仕掛けよう'],
+  defense: ['🧊', '冷静さが 武器', '相手の 重心を 見て 逆を つこう'],
+};
+const DEF_PT = {
+  defense: ['🧱', '守備の 安定感', '相手を ベースライン／サイドへ 追い込もう'],
+  power: ['🪨', '体の強さ', 'コースに 体を 入れて シュートを 難しく'],
+  quick: ['⚡', '反応の 速さ', '抜かれても もう一歩 前に 出て やり直す'],
+  speed: ['🏃', 'スピード', '戻りと 寄せで カバーを 続けよう'],
+  dribble: ['👁️', '観察力', '相手の 腰と ボールを 見て 反応'],
+  shoot: ['🙅', 'プレッシャー', 'シュートに 必ず 手を 伸ばそう'],
+};
+const labelOf = (k) => (PARAMS.find((p) => p.k === k) || { l: k }).l;
 function fbHTML(kind, a) { return `<div class="fb ${kind}"><div class="ico">${a[0]}</div><div class="txt"><b>${a[1]}</b><span>${a[2] || ''}</span></div></div>`; }
 const strongestK = (s) => PARAMS.slice().sort((a, b) => s[b.k] - s[a.k])[0].k;
 const weakestAmong = (s, keys) => keys.slice().sort((a, b) => s[a] - s[b])[0];
@@ -549,21 +588,38 @@ function fillPlayerSelect(sel, selId) {
 }
 function buildOneon(offId, defId, clipUrl) {
   const r = loadRoster(); const off = r.find((p) => p.id === offId) || r[0]; const def = r.find((p) => p.id === defId) || r[1];
-  const offGood = OFF_GOOD[strongestK(off.stats)] || OFF_GOOD.speed;
+  const oS = strongestK(off.stats), dS = strongestK(def.stats);
+  const offGood = OFF_GOOD[oS] || OFF_GOOD.speed;
   const offTip = OFF_TIP[weakestAmong(off.stats, ['shoot', 'dribble', 'power', 'quick'])] || OFF_TIP.shoot;
-  const defGood = DEF_GOOD[strongestK(def.stats)] || DEF_GOOD.defense;
+  const defGood = DEF_GOOD[dS] || DEF_GOOD.defense;
   const defTip = DEF_TIP[weakestAmong(def.stats, ['quick', 'defense', 'speed', 'power'])] || DEF_TIP.quick;
+  const offPt = OFF_PT[oS] || OFF_PT.speed, defPt = DEF_PT[dS] || DEF_PT.defense;
+  const offFocus = (suggestMenu(off.stats).drills[0] || ['—'])[0];
+  const defFocus = (suggestMenu(def.stats).drills[0] || ['—'])[0];
+  // positioning lines vary a little with the attacker's profile
+  const offPos = (off.stats.speed >= 70 || off.stats.quick >= 70)
+    ? 'ドライブの 角度を 作れています。一歩目で 抜き切りたい。'
+    : '相手を 引きつけて、味方の スペースを 作れています。';
+  const defPos = (def.stats.quick >= 70)
+    ? '相手とゴールの 間を キープし、抜かれても 戻れています。'
+    : '相手とゴールの 間は キープ。一歩目の 反応を 上げたい。';
   $('oneonResult').innerHTML =
     (clipUrl ? `<div class="video-wrap" style="margin-bottom:12px"><video src="${clipUrl}" playsinline muted controls style="width:100%;display:block"></video></div>` : '')
     + `<div class="vs-tag">🆚 1on1 レビュー（サンプル）</div>`
-    + `<div style="font-weight:800;font-size:17px;margin-bottom:12px">${off.name} <span style="color:var(--muted);font-weight:400">vs</span> ${def.name}</div>`
+    + `<div style="font-weight:800;font-size:17px;margin-bottom:6px">${off.name} <span style="color:var(--muted);font-weight:400">vs</span> ${def.name}</div>`
+    + `<div class="card" style="background:#10243a;border-color:#1d3a57"><div style="font-size:13px;color:#9fc4ee">🔍 マッチアップ</div>`
+    + `<div style="font-weight:700;margin-top:2px">${off.name}の【${labelOf(oS)}】 と ${def.name}の【${labelOf(dS)}】 の 勝負。</div></div>`
     + `<div class="card"><div class="role-ttl"><span class="dot" style="background:#ff8a2b"></span>オフェンス：${off.name}</div>`
     + fbHTML('good', offGood) + fbHTML('tip', offTip)
-    + `<div class="pos">📍 ポジショニング：ゴールへの 最短ラインを 取れています。</div></div>`
+    + `<div class="pos">💡 ポイント：<b>${offPt[1]}</b> — ${offPt[2]}</div>`
+    + `<div class="pos">📍 ポジショニング：${offPos}</div>`
+    + `<div class="pos" style="color:var(--orange-l)">🎯 今日のフォーカス：<b>${offFocus}</b></div></div>`
     + `<div class="card"><div class="role-ttl"><span class="dot" style="background:#3fe0a2"></span>ディフェンス：${def.name}</div>`
     + fbHTML('good', defGood) + fbHTML('tip', defTip)
-    + `<div class="pos">📍 ポジショニング：相手とゴールの 間を キープできています。</div></div>`
-    + `<p class="note" style="text-align:center">✓ 結果は 各選手のカードに 反映されます（サンプル）。<br>実解析（複数人・攻守 両者の自動評価）は 開発中です。</p>`;
+    + `<div class="pos">💡 ポイント：<b>${defPt[1]}</b> — ${defPt[2]}</div>`
+    + `<div class="pos">📍 ポジショニング：${defPos}</div>`
+    + `<div class="pos" style="color:var(--good)">🎯 今日のフォーカス：<b>${defFocus}</b></div></div>`
+    + `<p class="note" style="text-align:center">✓ 結果は 各選手のカードに 反映されます（サンプル）。<br>実解析（複数人・攻守 両者の自動評価・ポジショニング）は 開発中です。</p>`;
 }
 function runOneon() {
   showScreen('loading'); $('progressBar').style.width = '0%'; $('loadingMsg').textContent = 'AIが 1on1を 解析中…（サンプル）';

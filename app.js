@@ -97,13 +97,6 @@ async function analyzeFile(file) {
   if (frames.length < 4) { URL.revokeObjectURL(video.src); throw new Error('no-pose'); }
   return { frames, w, h, video };
 }
-// grab a single frame's pixels at time t (for drawing the result skeleton)
-async function grabFrame(video, t, w, h) {
-  await seek(video, t);
-  const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
-  cv.getContext('2d').drawImage(video, 0, 0, w, h);
-  return cv;
-}
 
 // ---- side / key-frame pickers ----
 function sideByConfidence(frames) {
@@ -142,7 +135,13 @@ function analyzeShooting({ frames }) {
   if (isFinite(mK)) metrics.push({ good: mK < 162, value: Math.round(mK) + '°', label: 'ひざのまげ',
     praise: ['🦵', 'ひざが よくまがってる！', 'あしの ちからで とおくまで とばせるよ'],
     tip: ['🦵', 'ひざを もうすこし まげよう', 'とぶまえに ひざをまげると ちからが でるよ'] });
-  const elb = angle(kp(rel, S('shoulder')), kp(rel, S('elbow')), kp(rel, S('wrist')));
+  // peak elbow extension across the shooting phase (a brief moment the coarse
+  // scan can miss at the exact release frame) — answers "did he straighten it?"
+  let elb = null;
+  for (let i = loadIdx; i < frames.length; i++) {
+    const a = angle(kp(frames[i], S('shoulder')), kp(frames[i], S('elbow')), kp(frames[i], S('wrist')));
+    if (a != null && (elb == null || a > elb)) elb = a;
+  }
   if (elb != null) metrics.push({ good: elb > 150, value: Math.round(elb) + '°', label: 'うでの のび',
     praise: ['💪', 'うでが まっすぐ のびてる！', 'リリースが きれいだよ'],
     tip: ['💪', 'うでを うえに ピンと のばそう', 'ボールを おすとき ひじを のばしきろう'] });
@@ -218,28 +217,66 @@ const MODE_ERR = {
 };
 
 // ---- render ----
-function drawSkeleton(canvas, srcCanvas, frame, w, h, side) {
-  canvas.width = w; canvas.height = h;
-  const ctx = canvas.getContext('2d');
-  ctx.drawImage(srcCanvas, 0, 0, w, h);
-  const pairs = [['shoulder', 'elbow'], ['elbow', 'wrist'], ['shoulder', 'hip'], ['hip', 'knee'], ['knee', 'ankle']];
-  ctx.lineWidth = Math.max(3, w / 120); ctx.strokeStyle = '#ff7a18'; ctx.lineCap = 'round';
-  for (const [a, b] of pairs) { const ka = kp(frame, side + '_' + a), kb = kp(frame, side + '_' + b);
-    if (ka && kb) { ctx.beginPath(); ctx.moveTo(ka.x, ka.y); ctx.lineTo(kb.x, kb.y); ctx.stroke(); } }
-  ['shoulder', 'elbow', 'wrist', 'hip', 'knee', 'ankle'].forEach((n) => { const k = kp(frame, side + '_' + n);
-    if (k) { ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(k.x, k.y, Math.max(4, w / 90), 0, 7); ctx.fill(); } });
+// full-body skeleton drawn as an overlay on the result video, at the key frame
+const SKELETON = [
+  ['left_shoulder', 'right_shoulder'], ['left_hip', 'right_hip'],
+  ['left_shoulder', 'left_hip'], ['right_shoulder', 'right_hip'],
+  ['left_shoulder', 'left_elbow'], ['left_elbow', 'left_wrist'],
+  ['right_shoulder', 'right_elbow'], ['right_elbow', 'right_wrist'],
+  ['left_hip', 'left_knee'], ['left_knee', 'left_ankle'],
+  ['right_hip', 'right_knee'], ['right_knee', 'right_ankle'],
+];
+const POINTS = ['nose', 'left_shoulder', 'right_shoulder', 'left_elbow', 'right_elbow',
+  'left_wrist', 'right_wrist', 'left_hip', 'right_hip', 'left_knee', 'right_knee', 'left_ankle', 'right_ankle'];
+function drawOverlayMarks(ov, frame, srcW, srcH) {
+  const ctx = ov.getContext('2d');
+  ov.width = ov.clientWidth; ov.height = ov.clientHeight;
+  ctx.clearRect(0, 0, ov.width, ov.height);
+  if (!ov.width || !ov.height) return;
+  const sx = ov.width / srcW, sy = ov.height / srcH;
+  const P = (n) => kp(frame, n, 0.3);
+  ctx.lineWidth = Math.max(3, ov.width / 110); ctx.strokeStyle = '#ff7a18'; ctx.lineCap = 'round';
+  for (const [a, b] of SKELETON) {
+    const ka = P(a), kb = P(b);
+    if (ka && kb) { ctx.beginPath(); ctx.moveTo(ka.x * sx, ka.y * sy); ctx.lineTo(kb.x * sx, kb.y * sy); ctx.stroke(); }
+  }
+  const r = Math.max(5, ov.width / 55);
+  for (const n of POINTS) {
+    const k = P(n);
+    if (k) { ctx.fillStyle = '#fff'; ctx.strokeStyle = '#e85d04'; ctx.lineWidth = Math.max(2, ov.width / 220);
+      ctx.beginPath(); ctx.arc(k.x * sx, k.y * sy, r, 0, 7); ctx.fill(); ctx.stroke(); }
+  }
+}
+// play the clip, then freeze at the key frame with the marks drawn on each joint
+function setupResultVideo(data, res) {
+  const vid = $('resultVideo'), ov = $('overlayCanvas');
+  const keyFrame = data.frames[res.keyIdx], keyTime = keyFrame.t;
+  let frozen = false;
+  const draw = () => drawOverlayMarks(ov, keyFrame, data.w, data.h);
+  const clear = () => { ov.width = ov.clientWidth; ov.height = ov.clientHeight; ov.getContext('2d').clearRect(0, 0, ov.width, ov.height); };
+  const freeze = () => { if (frozen) return; frozen = true; try { vid.pause(); } catch (e) {}
+    if (Math.abs(vid.currentTime - keyTime) > 0.05) vid.currentTime = keyTime; else draw(); };
+  vid.ontimeupdate = () => { if (!frozen && vid.currentTime >= keyTime) freeze(); };
+  vid.onseeked = () => { if (frozen) draw(); };
+  vid.onended = () => freeze();
+  $('replayBtn').onclick = () => { frozen = false; clear(); try { vid.currentTime = 0; } catch (e) {}
+    vid.play().catch(() => { frozen = true; vid.currentTime = keyTime; }); };
+  vid.src = data.video.src;
+  try { vid.currentTime = 0; } catch (e) {}
+  clear();
+  // autoplay through once; if blocked, just show the key frame with marks
+  vid.play().catch(() => { frozen = true; vid.currentTime = keyTime; });
 }
 function fbCard(kind, [ico, title, sub]) {
   const d = document.createElement('div'); d.className = 'fb ' + kind;
   d.innerHTML = `<div class="ico">${ico}</div><div class="txt"><b>${title}</b><span>${sub}</span></div>`;
   return d;
 }
-function showResult(mode, res, data, keyCanvas) {
+function showResult(mode, res, data) {
   const good = res.metrics.filter((m) => m.good).length;
   const stars = good >= 3 ? 3 : good === 2 ? 2 : 1;
   $('modeTag').textContent = MODE_LABEL[mode];
   $('scoreStars').textContent = '⭐'.repeat(stars);
-  drawSkeleton($('resultCanvas'), keyCanvas, data.frames[res.keyIdx], data.w, data.h, res.side);
   const goods = res.metrics.filter((m) => m.good), bads = res.metrics.filter((m) => !m.good);
   const fb = $('feedback'); fb.innerHTML = '';
   if (goods[0]) fb.appendChild(fbCard('good', goods[0].praise));
@@ -251,6 +288,7 @@ function showResult(mode, res, data, keyCanvas) {
     d.innerHTML = `<div class="v">${m.good ? '◎' : '△'} ${m.value}</div><div class="l">${m.label}</div>`; mWrap.appendChild(d); });
   saveSession(mode, stars, good, res.metrics.length);
   showScreen('result');
+  setupResultVideo(data, res); // after the screen is visible so the video has a size
 }
 
 // ---- practice log (localStorage, on-device) ----
@@ -313,8 +351,15 @@ function showHistory() {
 
 // ---- flow ----
 let currentMode = 'shoot';
+let currentUrl = null;
+function leaveResult() {
+  const vid = $('resultVideo');
+  try { vid.pause(); vid.removeAttribute('src'); vid.load(); } catch (e) {}
+  if (currentUrl) { try { URL.revokeObjectURL(currentUrl); } catch (e) {} currentUrl = null; }
+}
 async function handleFile(file) {
   if (!file) return;
+  leaveResult();
   showScreen('loading'); $('progressBar').style.width = '0%';
   $('loadingMsg').textContent = 'AIコーチが よみこみ中…';
   try {
@@ -323,9 +368,8 @@ async function handleFile(file) {
     const data = await analyzeFile(file);
     const res = ANALYZERS[currentMode](data);
     if (!res.metrics.length) { URL.revokeObjectURL(data.video.src); throw new Error('no-pose'); }
-    const keyCanvas = await grabFrame(data.video, data.frames[res.keyIdx].t, data.w, data.h);
-    URL.revokeObjectURL(data.video.src);
-    showResult(currentMode, res, data, keyCanvas);
+    currentUrl = data.video.src; // kept alive for result playback; revoked on leave
+    showResult(currentMode, res, data);
   } catch (e) {
     const map = {
       'no-pose': MODE_ERR[currentMode],
@@ -340,7 +384,7 @@ async function handleFile(file) {
 document.querySelectorAll('.mode-btn').forEach((btn) =>
   btn.addEventListener('click', () => { currentMode = btn.dataset.mode; $('videoInput').value = ''; $('videoInput').click(); }));
 $('videoInput').addEventListener('change', (e) => handleFile(e.target.files[0]));
-$('againBtn').addEventListener('click', () => { $('videoInput').value = ''; showScreen('home'); });
+$('againBtn').addEventListener('click', () => { leaveResult(); $('videoInput').value = ''; showScreen('home'); });
 $('errorBackBtn').addEventListener('click', () => { $('videoInput').value = ''; showScreen('home'); });
 $('historyBtn').addEventListener('click', () => { showHistory(); showScreen('history'); });
 $('histBackBtn').addEventListener('click', () => showScreen('home'));
@@ -349,4 +393,4 @@ $('clearBtn').addEventListener('click', () => {
 });
 
 // expose a couple of helpers for quick verification in the preview
-window.__hoop = { saveSession, loadLog, showHistory, analyzeDribble, analyzeDefense };
+window.__hoop = { saveSession, loadLog, showHistory, analyzeDribble, analyzeDefense, analyzeFile, analyzeShooting, ANALYZERS, getDetector };

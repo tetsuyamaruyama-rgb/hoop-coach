@@ -10,7 +10,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="バスケコーチ" />
   <link rel="apple-touch-icon" href="icons/icon-180.png" />
-  <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="styles.css?v=4" />
 </head>
 <body>
   <div id="app">
@@ -51,7 +51,11 @@
     <section id="screen-result" class="screen">
       <div class="mode-tag" id="modeTag"></div>
       <div class="score" id="scoreStars">⭐</div>
-      <canvas id="resultCanvas"></canvas>
+      <div class="video-wrap">
+        <video id="resultVideo" playsinline muted webkit-playsinline></video>
+        <canvas id="overlayCanvas"></canvas>
+      </div>
+      <button class="link-btn" id="replayBtn">▶ もういちど さいせい</button>
       <div id="feedback"></div>
       <div class="metrics" id="metrics"></div>
       <p class="saved-note" id="savedNote">📒 きろくに ほぞんしたよ！</p>
@@ -83,6 +87,6 @@
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-converter@4.20.0/dist/tf-converter.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-webgl@4.20.0/dist/tf-backend-webgl.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection@2.1.3/dist/pose-detection.min.js"></script>
-  <script src="app.js"></script>
+  <script src="app.js?v=4"></script>
 </body>
 </html>

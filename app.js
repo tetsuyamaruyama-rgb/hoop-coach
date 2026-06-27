@@ -547,14 +547,15 @@ function fillPlayerSelect(sel, selId) {
   sel.innerHTML = loadRoster().map((p) => `<option value="${p.id}">${p.name}（#${p.num}・${p.pos}）</option>`).join('');
   if (selId) sel.value = selId;
 }
-function buildOneon(offId, defId) {
+function buildOneon(offId, defId, clipUrl) {
   const r = loadRoster(); const off = r.find((p) => p.id === offId) || r[0]; const def = r.find((p) => p.id === defId) || r[1];
   const offGood = OFF_GOOD[strongestK(off.stats)] || OFF_GOOD.speed;
   const offTip = OFF_TIP[weakestAmong(off.stats, ['shoot', 'dribble', 'power', 'quick'])] || OFF_TIP.shoot;
   const defGood = DEF_GOOD[strongestK(def.stats)] || DEF_GOOD.defense;
   const defTip = DEF_TIP[weakestAmong(def.stats, ['quick', 'defense', 'speed', 'power'])] || DEF_TIP.quick;
   $('oneonResult').innerHTML =
-    `<div class="vs-tag">🆚 1on1 レビュー（サンプル）</div>`
+    (clipUrl ? `<div class="video-wrap" style="margin-bottom:12px"><video src="${clipUrl}" playsinline muted controls style="width:100%;display:block"></video></div>` : '')
+    + `<div class="vs-tag">🆚 1on1 レビュー（サンプル）</div>`
     + `<div style="font-weight:800;font-size:17px;margin-bottom:12px">${off.name} <span style="color:var(--muted);font-weight:400">vs</span> ${def.name}</div>`
     + `<div class="card"><div class="role-ttl"><span class="dot" style="background:#ff8a2b"></span>オフェンス：${off.name}</div>`
     + fbHTML('good', offGood) + fbHTML('tip', offTip)
@@ -577,6 +578,81 @@ $('oneonBack').addEventListener('click', () => showScreen('home'));
 $('oneonPick').addEventListener('click', () => { $('oneonInput').value = ''; $('oneonInput').click(); });
 $('oneonInput').addEventListener('change', (e) => { if (e.target.files[0]) runOneon(); });
 $('oneonAgain').addEventListener('click', () => showScreen('home'));
+
+// ---- in-app recorder: continuous record + one-tap offense/defense swap ----
+let recStream = null, recRecorder = null, recChunks = [], recMime = '', recSegRoles = null,
+  recSegStart = 0, recEnding = false, recClips = [], recOff = 'a', recDef = 'b', recN = 0;
+const nameOf = (id) => { const p = loadRoster().find((x) => x.id === id); return p ? `${p.name}（#${p.num}）` : id; };
+function recUpdateRoles() { $('recOffV').textContent = nameOf(recOff); $('recDefV').textContent = nameOf(recDef); }
+function recPickMime() {
+  const c = ['video/mp4', 'video/mp4;codecs=h264', 'video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm'];
+  for (const m of c) { try { if (window.MediaRecorder && MediaRecorder.isTypeSupported(m)) return m; } catch (e) {} } return '';
+}
+async function recOpenCamera() {
+  $('recStatus').textContent = 'カメラを ひらいています…';
+  $('recStart').disabled = true; $('recSwitch').disabled = true; $('recStop').disabled = true;
+  try {
+    try { recStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false }); }
+    catch (e) { recStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false }); }
+    $('recPrev').srcObject = recStream; await $('recPrev').play().catch(() => {});
+    recMime = recPickMime();
+    $('recStart').disabled = false;
+    $('recStatus').textContent = '役割を確認して「録画スタート」。';
+  } catch (e) { $('recStatus').textContent = 'カメラを ひらけませんでした：' + e.name + '（カメラの許可を確認してください）'; }
+}
+function recStopCamera() { if (recStream) { recStream.getTracks().forEach((t) => t.stop()); recStream = null; } }
+function recStartSeg() {
+  recChunks = []; recSegRoles = { off: recOff, def: recDef }; recSegStart = Date.now();
+  try { recRecorder = recMime ? new MediaRecorder(recStream, { mimeType: recMime }) : new MediaRecorder(recStream); }
+  catch (e) { $('recStatus').textContent = '録画を 開始できません：' + e.message; return; }
+  recRecorder.ondataavailable = (e) => { if (e.data && e.data.size) recChunks.push(e.data); };
+  recRecorder.onstop = recOnSegStop;
+  recRecorder.start();
+}
+function recOnSegStop() {
+  const blob = new Blob(recChunks, { type: (recChunks[0] && recChunks[0].type) || recMime || 'video/mp4' });
+  recN++; recClips.push({ n: recN, off: recSegRoles.off, def: recSegRoles.def, dur: Math.max(0, (Date.now() - recSegStart) / 1000), url: URL.createObjectURL(blob) });
+  if (!recEnding) { recStartSeg(); }
+  else { recStopCamera(); renderClips(); showScreen('1on1-clips'); }
+}
+function renderClips() {
+  const list = $('clipList');
+  if (!recClips.length) { list.innerHTML = '<div class="empty">クリップが ありません。</div>'; return; }
+  list.innerHTML = '';
+  recClips.forEach((c) => {
+    const row = document.createElement('div'); row.className = 'clip-row';
+    row.innerHTML = `<video src="${c.url}" playsinline muted></video>`
+      + `<div class="ci"><b>ポゼッション${c.n}</b><span>攻 ${nameOf(c.off)} / 守 ${nameOf(c.def)} ・ 約${c.dur.toFixed(1)}秒</span></div>`
+      + `<button class="rev">レビュー</button>`;
+    row.querySelector('.rev').onclick = () => { buildOneon(c.off, c.def, c.url); showScreen('1on1-result'); };
+    list.appendChild(row);
+  });
+}
+$('oneonRec').addEventListener('click', () => {
+  recOff = $('offSel').value; recDef = $('defSel').value; recClips = []; recN = 0; recEnding = false;
+  recUpdateRoles(); showScreen('1on1-rec'); recOpenCamera();
+});
+$('recStart').addEventListener('click', () => {
+  if (!recStream) return; recEnding = false; recStartSeg();
+  $('recStart').disabled = true; $('recSwitch').disabled = false; $('recStop').disabled = false;
+  $('recStatus').textContent = '● 録画中… 攻撃が終わったら「攻守交替」。';
+});
+$('recSwitch').addEventListener('click', () => {
+  if (!recRecorder || recRecorder.state === 'inactive') return;
+  recEnding = false; const o = recOff; recOff = recDef; recDef = o; recUpdateRoles();
+  recRecorder.stop(); // saves current possession (with its own roles) then auto-restarts with swapped roles
+  $('recStatus').textContent = '● 録画中… 攻守交替！ 次の攻撃へ。';
+});
+$('recStop').addEventListener('click', () => {
+  if (!recRecorder || recRecorder.state === 'inactive') { recStopCamera(); showScreen('1on1'); return; }
+  recEnding = true; recRecorder.stop();
+  $('recSwitch').disabled = true; $('recStop').disabled = true;
+});
+$('recBack').addEventListener('click', () => {
+  recEnding = true; try { if (recRecorder && recRecorder.state !== 'inactive') recRecorder.stop(); } catch (e) {}
+  recStopCamera(); showScreen('1on1');
+});
+$('clipsBack').addEventListener('click', () => showScreen('1on1'));
 
 // expose a couple of helpers for quick verification in the preview
 window.__hoop = { saveSession, loadLog, showHistory, analyzeDribble, analyzeDefense, analyzeFile, analyzeShooting, ANALYZERS, getDetector, loadRoster, renderRoster, openPlayer, suggestMenu, buildOneon };

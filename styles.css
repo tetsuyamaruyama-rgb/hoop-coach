@@ -152,3 +152,18 @@ header h1 span{color:var(--orange)}
 .role-ttl{font-weight:800;font-size:15px;margin:0 0 8px;display:flex;align-items:center;gap:8px}
 .role-ttl .dot{width:11px;height:11px;border-radius:50%;flex:none}
 .pos{font-size:13px;color:var(--muted);margin-top:8px;padding-top:8px;border-top:1px dashed var(--line)}
+
+/* in-app recorder */
+.rec-prev{width:100%;border-radius:12px;background:#000;display:block;margin-bottom:10px}
+.roles{display:flex;gap:10px;margin:0 0 12px}
+.role{flex:1;text-align:center;border-radius:10px;padding:8px;border:1px solid var(--line);background:var(--card)}
+.role .l{font-size:11px;color:var(--muted)}
+.role .v{font-size:18px;font-weight:800}
+.role.off{border-color:var(--orange)}.role.off .v{color:var(--orange-l)}
+.role.def{border-color:var(--good)}.role.def .v{color:var(--good)}
+.clip-row{display:flex;gap:10px;align-items:center;background:var(--card);border:1px solid var(--line);
+  border-radius:12px;padding:10px;margin-bottom:8px}
+.clip-row video{width:92px;height:56px;border-radius:8px;background:#000;flex:none;object-fit:cover}
+.clip-row .ci{flex:1}.clip-row .ci b{display:block;font-size:14px}.clip-row .ci span{font-size:12px;color:var(--muted)}
+.clip-row .rev{font-size:13px;font-weight:800;border:none;border-radius:10px;padding:8px 14px;
+  background:var(--orange);color:#1a1207;cursor:pointer}

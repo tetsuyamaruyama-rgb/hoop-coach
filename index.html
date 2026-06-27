@@ -10,7 +10,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="バスケコーチ" />
   <link rel="apple-touch-icon" href="icons/icon-180.png" />
-  <link rel="stylesheet" href="styles.css?v=9" />
+  <link rel="stylesheet" href="styles.css?v=10" />
 </head>
 <body>
   <div id="app">
@@ -93,8 +93,32 @@
         <select id="defSel" class="pick"></select>
       </div>
       <input id="oneonInput" type="file" accept="video/*" hidden />
-      <button class="big-btn" id="oneonPick"><span class="emoji">🎥</span><span>どうがを えらんで 分析</span></button>
+      <button class="big-btn" id="oneonRec"><span class="emoji">🎥</span><span>録画して 記録</span><small>連続録画・ワンタップ攻守交替</small></button>
+      <button class="link-btn" id="oneonPick">📁 動画ファイルから 分析</button>
       <button class="big-btn secondary" id="oneonBack">⬅️ もどる</button>
+    </section>
+
+    <!-- 1on1 in-app recorder -->
+    <section id="screen-1on1-rec" class="screen">
+      <h2 class="h2">🎥 録画</h2>
+      <video id="recPrev" class="rec-prev" playsinline webkit-playsinline muted autoplay></video>
+      <div class="roles">
+        <div class="role off"><div class="l">オフェンス（攻め）</div><div class="v" id="recOffV">-</div></div>
+        <div class="role def"><div class="l">ディフェンス（守り）</div><div class="v" id="recDefV">-</div></div>
+      </div>
+      <button class="big-btn" id="recStart">● 録画スタート</button>
+      <button class="big-btn" id="recSwitch" style="background:#5ab0ff" disabled>🔄 攻守交替（この攻撃を保存）</button>
+      <button class="big-btn" id="recStop" style="background:#ff6b6b" disabled>■ 終了</button>
+      <p class="note" id="recStatus" style="text-align:center">カメラを ひらいています…</p>
+      <button class="big-btn secondary" id="recBack">⬅️ やめる</button>
+    </section>
+
+    <!-- 1on1 recorded clips -->
+    <section id="screen-1on1-clips" class="screen">
+      <h2 class="h2">📹 録画した ポゼッション</h2>
+      <p class="note" style="margin:0 0 12px">クリップを えらんで レビューします。</p>
+      <div id="clipList"></div>
+      <button class="big-btn secondary" id="clipsBack">⬅️ もどる</button>
     </section>
 
     <!-- 1on1 result -->
@@ -129,6 +153,6 @@
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-converter@4.20.0/dist/tf-converter.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-webgl@4.20.0/dist/tf-backend-webgl.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection@2.1.3/dist/pose-detection.min.js"></script>
-  <script src="app.js?v=9"></script>
+  <script src="app.js?v=10"></script>
 </body>
 </html>

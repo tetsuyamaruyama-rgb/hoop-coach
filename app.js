@@ -81,24 +81,27 @@ async function analyzeFile(file) {
   const w = PROC_W, h = Math.round(PROC_W * vh / vw);
   const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
   const ctx = cv.getContext('2d');
-  const targetCount = Math.max(6, Math.min(30, Math.round(dur * 6)));
+  const targetCount = Math.max(8, Math.min(45, Math.round(dur * 8)));
   const minGap = dur / targetCount;
   const frames = [];
-  let lastT = -1, busy = false, finished = false;
+  const sampled = new Set(); // fixed time-grid bins → consistent samples across runs
+  let busy = false, finished = false;
 
   await new Promise((resolve) => {
     const finish = () => { if (finished) return; finished = true; $('progressBar').style.width = '100%'; resolve(); };
     const sample = async () => {
       if (finished || busy) return;
       const t = video.currentTime;
-      if (lastT >= 0 && t - lastT < minGap * 0.9) return;
-      busy = true; lastT = t;
+      const bin = Math.floor(t / minGap); // map to a fixed time slot; one sample per slot
+      if (sampled.has(bin)) return;
+      sampled.add(bin);
+      busy = true;
       try {
         ctx.drawImage(video, 0, 0, w, h);
         const poses = await det.estimatePoses(cv, { maxPoses: 1, flipHorizontal: false });
         if (poses[0] && poses[0].keypoints.filter((k) => k.score > 0.3).length >= 6) {
           const byName = {}; poses[0].keypoints.forEach((k) => (byName[k.name] = k));
-          frames.push({ t, byName });
+          frames.push({ t: bin * minGap, byName });
         }
       } catch (e) {}
       busy = false;
